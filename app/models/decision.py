@@ -55,6 +55,17 @@ class DecisionRecord(BaseModel):
         description="Enforced at the storage layer.  This field is a documentary marker.",
     )
 
+    # Full node-by-node pipeline trace for audit trail
+    pipeline_trace: list[dict] = Field(
+        default_factory=list,
+        description="Ordered list of trace entries, one per graph node execution.",
+    )
+
+    # Hold / verification state — populated for non-DecisionRecord paths but
+    # included here for convenience on the detail endpoint
+    missing_docs: list[str] = Field(default_factory=list)
+    consistency_flags: list[str] = Field(default_factory=list)
+
 
 class DecisionAmendment(BaseModel):
     """
