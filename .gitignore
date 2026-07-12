@@ -43,3 +43,4 @@ Thumbs.db
 
 # Chroma vector store (local)
 chroma_db/
+backend.log
