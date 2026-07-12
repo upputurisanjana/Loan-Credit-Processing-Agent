@@ -1,0 +1,64 @@
+/* src/styles/tokens.css
+   Design tokens from UI_UX_DESIGN.md §1 — palette, typography, ledger aesthetic */
+
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ─────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    background-color: #FAF8F3;   /* paper */
+    color: #12213A;              /* ink */
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tabular figures everywhere a number appears in a table or metric */
+  td, th, [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3 {
+    font-family: "Lora", Georgia, serif;
+    font-weight: 600;
+    color: #12213A;
+  }
+}
+
+/* ── Ledger table style ──────────────────────────────────────────────── */
+@layer components {
+  .ledger-table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .ledger-table thead th {
+    @apply text-xs font-medium uppercase tracking-wider text-[#8A8072]
+           border-b border-[#D6D0C4] pb-2 text-left;
+  }
+
+  .ledger-table tbody tr {
+    @apply border-b border-[#D6D0C4] cursor-pointer transition-colors;
+  }
+
+  .ledger-table tbody tr:hover {
+    @apply bg-[#F2EFE8];
+  }
+
+  .ledger-table tbody td {
+    @apply py-3 px-2;
+  }
+
+  /* Card / panel */
+  .ledger-card {
+    @apply bg-white border border-[#D6D0C4] rounded-sm p-5;
+  }
+
+  /* Section label */
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-[#8A8072] mb-3;
+  }
+}
