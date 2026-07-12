@@ -1,0 +1,97 @@
+# policy/policy_v1.yaml
+# Active credit policy loaded by the deterministic scoring engine.
+# Changes to weights/thresholds here take effect on next application run —
+# no code change required.  Every decision record stores a snapshot of
+# the version string so decisions remain reproducible against the policy
+# that was live at decisioning time.
+
+version: "v1.2"
+effective_date: "2026-01-01"
+description: >
+  Standard retail lending credit policy for personal loans.
+  Applies to all applications received on or after the effective_date.
+
+# ----- Composite score weights -----
+# Must sum to 1.0
+weights:
+  dti: 0.40
+  credit_history: 0.35
+  income_stability: 0.25
+
+# ----- Band thresholds -----
+# composite_score >= approve_min  → APPROVE
+# composite_score >= refer_min    → REFER
+# composite_score <  refer_min    → DECLINE
+bands:
+  approve_min: 0.75
+  refer_min: 0.65
+
+# ----- DTI sub-scoring -----
+# dti_ratio = monthly_debt / monthly_income (decimal)
+# Sub-score is 1.0 at best (low DTI) and 0.0 at worst (high DTI)
+dti_scoring:
+  excellent_max: 0.30     # DTI <= 30%  → sub-score 1.0
+  acceptable_max: 0.43    # DTI <= 43%  → linear interpolation 0.5–1.0
+  poor_max: 0.55          # DTI <= 55%  → linear interpolation 0.0–0.5
+  # DTI > poor_max  → sub-score 0.0
+
+# ----- Credit history sub-scoring -----
+credit_history_scoring:
+  min_years_full_credit: 5.0     # >= 5 years → contributes 1.0 to history component
+  min_years_any_credit: 2.0      # < 2 years  → sub-score component 0.0 (see CH-01)
+  late_payment_12m_penalty: 0.30 # each late payment in last 12m deducts this
+  default_penalty: 0.50          # any default on record deducts this (capped at 1.0 total)
+
+# ----- Income stability sub-scoring -----
+income_stability_scoring:
+  min_months_full_credit: 24   # >= 24 months current employment → 1.0
+  min_months_any_credit: 6     # < 6 months → 0.0 (see INC-01)
+
+# ----- Policy clauses -----
+# clause_id: referenced in ScoreBreakdown.clause_citations and in the LLM rationale
+clauses:
+  DTI-01:
+    text: >
+      Debt-to-income ratio must not exceed 43% for automatic approval consideration.
+      A DTI above 43% places the application in the REFER or DECLINE band depending
+      on the composite score.
+    factor: dti
+
+  DTI-02:
+    text: >
+      Applications with a DTI ratio at or below 30% receive maximum weighting on
+      the debt-to-income component, reflecting strong repayment capacity.
+    factor: dti
+
+  CH-01:
+    text: >
+      A minimum of 2 years of credit history is required.  Applicants with fewer
+      than 2 years of credit history receive a zero sub-score on the credit-history
+      component, regardless of other factors.
+    factor: credit_history
+
+  CH-02:
+    text: >
+      Late payments recorded within the last 12 months reduce the credit-history
+      sub-score proportionally.  Each late payment event deducts 0.30 from the
+      sub-score component (floor: 0.0).
+    factor: credit_history
+
+  CH-03:
+    text: >
+      Any recorded default on the credit file applies an additional 0.50 deduction
+      to the credit-history sub-score (floor: 0.0, cumulative with CH-02 penalties).
+    factor: credit_history
+
+  INC-01:
+    text: >
+      A minimum of 6 months in the applicant's current employment is required for
+      any income-stability credit.  Applicants below this threshold receive a zero
+      sub-score on the income-stability component.
+    factor: income_stability
+
+  INC-02:
+    text: >
+      Applicants with 24 or more months of continuous employment in their current
+      role receive the maximum income-stability sub-score.
+    factor: income_stability
