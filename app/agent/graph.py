@@ -26,13 +26,15 @@ from langgraph.graph import StateGraph, END
 from app.models.application import ApplicationRaw, ApplicationFields
 from app.models.verification import VerifyResult
 from app.models.scoring import ScoreBreakdown
-from app.models.fairness import FairnessCheck
+from app.models.fairness import FairnessCheck, ChallengerResult
 from app.models.decision import DecisionRecord
 from app.agent.nodes.verify import run_verify
 from app.agent.nodes.extract import run_extract
 from app.agent.nodes.score import run_score
 from app.agent.nodes.fairness_recheck import run_fairness_recheck
 from app.agent.nodes.recommend import run_recommend
+from app.agent.nodes.challenger_compare import run_challenger_compare
+from app.agent.nodes.draft_notice import run_draft_notice
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +49,10 @@ class AgentState(TypedDict, total=False):
     fields: ApplicationFields
     score_breakdown: ScoreBreakdown
     fairness_check: FairnessCheck
+    challenger_result: "ChallengerResult | None"
     agent_recommendation: str
     rationale: str
+    adverse_action_draft: str
     status: str          # "ok" | "hold_for_document" | "pending_human_review" | "flag_fairness_fail" | "error"
     error_message: str | None
     pipeline_trace: list[dict]
@@ -113,6 +117,43 @@ def node_score(state: AgentState) -> AgentState:
     return state
 
 
+def node_challenger(state: AgentState) -> AgentState:
+    """
+    Run the challenger model comparison.
+
+    Per ARCHITECTURE.md §6: the challenger does NOT replace the band from
+    the deterministic scorer.  It only checks whether an independent model
+    would suggest a different band, as a sanity check.  Disagreement > 1
+    band forces REFER (handled in node_fairness_recheck routing).
+    """
+    fields: ApplicationFields = state["fields"]
+    breakdown: ScoreBreakdown = state["score_breakdown"]
+    log.info("node=CHALLENGER app=%s", fields.application_id)
+
+    challenger_result = run_challenger_compare(fields, breakdown)
+    state["challenger_result"] = challenger_result
+
+    # If challenger disagrees by > 1 band, force a refer via status
+    if not challenger_result.bands_agree:
+        log.warning(
+            "app=%s challenger_disagree primary=%s challenger=%s — forcing REFER",
+            fields.application_id,
+            challenger_result.primary_band,
+            challenger_result.challenger_band,
+        )
+        # Don't set flag_fairness_fail here — keep it as a separate signal
+        # The band in score_breakdown stays; REFER is enforced at recommend time
+        state["status"] = state.get("status", "ok")  # preserve existing status
+
+    _trace(state, "CHALLENGER", {
+        "primary_band":     challenger_result.primary_band,
+        "challenger_band":  challenger_result.challenger_band,
+        "bands_agree":      challenger_result.bands_agree,
+        "delta":            challenger_result.delta,
+    })
+    return state
+
+
 def node_fairness_recheck(state: AgentState) -> AgentState:
     """
     Calls run_fairness_recheck from the standalone fairness_recheck module.
@@ -173,9 +214,46 @@ def node_recommend(state: AgentState) -> AgentState:
     fairness: FairnessCheck = state["fairness_check"]
     log.info("node=RECOMMEND app=%s", fields.application_id)
     recommendation, rationale = run_recommend(breakdown, fairness, fields.application_id)
+
+    # Challenger disagreement (>1 band) forces REFER regardless of primary
+    cr = state.get("challenger_result")
+    if cr is not None and not cr.bands_agree and recommendation != "refer":
+        log.warning(
+            "app=%s challenger_disagree forcing recommendation from %s → refer",
+            fields.application_id, recommendation,
+        )
+        recommendation = "refer"
+        rationale = (
+            f"CHALLENGER FLAG: Primary model suggested '{breakdown.band}' but the "
+            f"challenger model suggested '{cr.challenger_band}' — disagreement exceeds "
+            "1 band. Recommendation forced to REFER for mandatory human review.\n\n"
+            + rationale
+        )
+
     state["agent_recommendation"] = recommendation
     state["rationale"] = rationale
     _trace(state, "RECOMMEND", {"recommendation": recommendation})
+    return state
+
+
+def node_draft_notice(state: AgentState) -> AgentState:
+    """
+    Generate an adverse-action notice draft for DECLINE recommendations.
+    Only runs when agent_recommendation == "decline".
+    The draft is stored in the state and later written to DecisionRecord.adverse_action_draft.
+    """
+    recommendation = state.get("agent_recommendation", "")
+    if recommendation != "decline":
+        _trace(state, "DRAFT_NOTICE", {"skipped": True, "reason": f"recommendation={recommendation}"})
+        return state
+
+    fields: ApplicationFields = state["fields"]
+    breakdown: ScoreBreakdown = state["score_breakdown"]
+    log.info("node=DRAFT_NOTICE app=%s generating adverse-action draft", fields.application_id)
+
+    draft = run_draft_notice(breakdown, fields.application_id)
+    state["adverse_action_draft"] = draft
+    _trace(state, "DRAFT_NOTICE", {"draft_length": len(draft)})
     return state
 
 
@@ -220,9 +298,11 @@ def build_graph() -> Any:
     graph.add_node("hold", node_hold)
     graph.add_node("extract", node_extract)
     graph.add_node("score", node_score)
+    graph.add_node("challenger", node_challenger)
     graph.add_node("fairness_recheck", node_fairness_recheck)
     graph.add_node("flag_fairness_fail", node_flag_fairness_fail)
     graph.add_node("recommend", node_recommend)
+    graph.add_node("draft_notice", node_draft_notice)
     graph.add_node("human_gate", node_human_gate)
 
     graph.set_entry_point("verify")
@@ -239,7 +319,9 @@ def build_graph() -> Any:
         route_after_extract,
         {"score": "score", "human_gate": "human_gate"},
     )
-    graph.add_edge("score", "fairness_recheck")
+    # SCORE → CHALLENGER → FAIRNESS_RECHECK
+    graph.add_edge("score", "challenger")
+    graph.add_edge("challenger", "fairness_recheck")
 
     # KEY conditional edge: mismatch → flag_fairness_fail, match → recommend
     graph.add_conditional_edges(
@@ -248,9 +330,10 @@ def build_graph() -> Any:
         {"recommend": "recommend", "flag_fairness_fail": "flag_fairness_fail"},
     )
 
-    # Both fairness paths converge at human_gate
-    graph.add_edge("flag_fairness_fail", "human_gate")
-    graph.add_edge("recommend", "human_gate")
+    # Both fairness paths converge at human_gate (via draft_notice)
+    graph.add_edge("flag_fairness_fail", "draft_notice")
+    graph.add_edge("recommend", "draft_notice")
+    graph.add_edge("draft_notice", "human_gate")
     graph.add_edge("human_gate", END)
 
     return graph.compile()
@@ -307,20 +390,24 @@ def run_pipeline(raw: ApplicationRaw) -> "DecisionRecord | dict":
 
     # Both "pending_human_review" and "flag_fairness_fail" end up here
     # (flag_fairness_fail also sets agent_recommendation="refer" before human_gate)
+    verify_result = final_state.get("verify_result")
     record = DecisionRecord(
         application_id=raw.application_id,
         policy_version=final_state["score_breakdown"].policy_version,
         score_breakdown=final_state["score_breakdown"],
         fairness_check=final_state["fairness_check"],
-        challenger_result=None,
+        challenger_result=final_state.get("challenger_result"),
         agent_recommendation=final_state["agent_recommendation"],
         rationale=final_state["rationale"],
-        adverse_action_draft=None,
+        adverse_action_draft=final_state.get("adverse_action_draft") or None,
         human_decision=None,
         human_reviewer=None,
         override_reason=None,
         decided_at=None,
         created_at=datetime.utcnow(),
+        pipeline_trace=final_state.get("pipeline_trace", []),
+        missing_docs=verify_result.missing_docs if verify_result else [],
+        consistency_flags=verify_result.consistency_flags if verify_result else [],
     )
     return record
 

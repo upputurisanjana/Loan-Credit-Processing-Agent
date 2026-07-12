@@ -103,3 +103,51 @@ async def get_application(application_id: str) -> dict:
 def get_store() -> dict[str, Any]:
     """Expose the in-memory store to the decisions router."""
     return _store
+
+
+@router.get(
+    "",
+    summary="List all applications in the queue",
+    tags=["queue"],
+)
+async def list_queue() -> list[dict]:
+    """
+    Return a summary of all applications suitable for the Case Queue table.
+    Includes composite score, band, status, fairness match, and challenger
+    disagreement flags.  Sorted oldest-first (REFER-first is done client-side).
+    """
+    items = []
+    for record in _store.values():
+        if isinstance(record, DecisionRecord):
+            sb = record.score_breakdown
+            cr = record.challenger_result
+            items.append({
+                "application_id":        record.application_id,
+                "agent_recommendation":  record.agent_recommendation,
+                "status": "decided" if record.human_decision else "pending_human_review",
+                "created_at":            record.created_at.isoformat(),
+                "composite_score":       sb.composite_score,
+                "band":                  sb.band,
+                "policy_version":        record.policy_version,
+                "fairness_match":        record.fairness_check.match,
+                "challenger_disagreement": (cr is not None and not cr.bands_agree),
+                "human_decision":        record.human_decision,
+            })
+        else:
+            # Hold / error state — include as minimal entry
+            app_id = record.get("application_id", "unknown")
+            items.append({
+                "application_id":        app_id,
+                "agent_recommendation":  None,
+                "status":                record.get("status", "error"),
+                "created_at":            datetime.utcnow().isoformat(),
+                "composite_score":       0.0,
+                "band":                  "refer",
+                "policy_version":        "-",
+                "fairness_match":        True,
+                "challenger_disagreement": False,
+                "human_decision":        None,
+            })
+    # Oldest first
+    items.sort(key=lambda x: x["created_at"])
+    return items
