@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-001",
+  "submitted_at": "2026-07-12T06:00:00Z",
+  "applicant_name": "Jane Smith",
+  "applicant_address": "42 Maple Street, London, EC1A 1BB",
+  "stated_income": 5000.00,
+  "stated_monthly_debt": 1200.00,
+  "loan_amount_requested": 20000.00,
+  "applicant_notes": "Looking forward to the application process.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-001/id_passport.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Jane Smith\nDate of Birth: 1985-03-14\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-001/pay_stub_june.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Jane Smith\nEmployer: TechCorp Ltd\nMonthly Gross Income: 5000.00\nNet Pay: 3850.00\nEmployment Start: 2019-02-01"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-001/bank_statement_june.pdf",
+      "ocr_confidence": 0.93,
+      "extracted_text": "Account Holder: Jane Smith\nStatement Period: June 2026\nOpening Balance: 8200.00\nClosing Balance: 7400.00\nRegular Income Credits: 3850.00"
+    }
+  ]
+}

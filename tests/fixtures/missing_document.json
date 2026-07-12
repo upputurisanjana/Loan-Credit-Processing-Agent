@@ -1,0 +1,18 @@
+{
+  "application_id": "APP-003",
+  "submitted_at": "2026-07-12T06:10:00Z",
+  "applicant_name": "Emily Chen",
+  "applicant_address": "7 River Road, Bristol, BS1 4ST",
+  "stated_income": 4200.00,
+  "stated_monthly_debt": 900.00,
+  "loan_amount_requested": 10000.00,
+  "applicant_notes": "Will upload pay stub shortly.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-003/id_passport.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PASSPORT\nName: Emily Chen\nDOB: 1992-11-05"
+    }
+  ]
+}

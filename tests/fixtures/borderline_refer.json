@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-002",
+  "submitted_at": "2026-07-12T06:05:00Z",
+  "applicant_name": "Robert Brown",
+  "applicant_address": "18 Oak Avenue, Manchester, M1 1AD",
+  "stated_income": 3200.00,
+  "stated_monthly_debt": 1350.00,
+  "loan_amount_requested": 15000.00,
+  "applicant_notes": "Self-employed contractor.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-002/id_driving_licence.pdf",
+      "ocr_confidence": 0.91,
+      "extracted_text": "DRIVING LICENCE\nName: Robert Brown\nDOB: 1980-07-22"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-002/pay_stub_june.pdf",
+      "ocr_confidence": 0.88,
+      "extracted_text": "INVOICE / INCOME STATEMENT - June 2026\nContractor: Robert Brown\nMonthly Gross Income: 3200.00\nClient: Consulting Partners Ltd"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-002/bank_statement.pdf",
+      "ocr_confidence": 0.90,
+      "extracted_text": "Account Holder: Robert Brown\nStatement Period: June 2026\nOpening Balance: 1800.00\nClosing Balance: 1600.00\nIncome Credits: 3200.00"
+    }
+  ]
+}
