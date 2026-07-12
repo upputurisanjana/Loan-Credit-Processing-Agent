@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-004A",
+  "submitted_at": "2026-07-12T06:15:00Z",
+  "applicant_name": "Alice Johnson",
+  "applicant_address": "12 Baker Street, London, W1U 3BH",
+  "stated_income": 4500.00,
+  "stated_monthly_debt": 1350.00,
+  "loan_amount_requested": 18000.00,
+  "applicant_notes": "Applying for home improvement loan.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-004A/id_passport.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PASSPORT\nName: Alice Johnson\nDOB: 1988-06-12"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-004A/pay_stub.pdf",
+      "ocr_confidence": 0.94,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Alice Johnson\nMonthly Gross Income: 4500.00\nEmployment Start: 2020-03-01"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-004A/bank_statement.pdf",
+      "ocr_confidence": 0.92,
+      "extracted_text": "Account Holder: Alice Johnson\nStatement Period: June 2026\nIncome Credits: 4500.00"
+    }
+  ]
+}
