@@ -16,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings  # noqa: F401 (side-effect import)
 from app.routers.intake import router as intake_router
 from app.routers.decisions import router as decisions_router
+from app.routers.queue import router as queue_router
+from app.routers.audit import router as audit_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -55,6 +57,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 app.include_router(intake_router)
 app.include_router(decisions_router)
+app.include_router(queue_router)
+app.include_router(audit_router)
 
 
 # ---------------------------------------------------------------------------
