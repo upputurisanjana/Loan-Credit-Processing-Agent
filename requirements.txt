@@ -1,0 +1,32 @@
+# Core
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.11.7
+pydantic-settings==2.9.1
+
+# Agent / LLM
+langgraph==0.4.8
+langchain==0.3.25
+langchain-openai==0.3.25
+openai==1.93.0
+
+# Policy parsing
+pyyaml==6.0.2
+
+# Environment
+python-dotenv==1.1.1
+
+# Database (Phase 2 ready)
+sqlalchemy==2.0.41
+
+# Vector store (Phase 2 — policy RAG)
+chromadb==1.0.15
+
+# OCR (optional — needed for scanned document support)
+pytesseract==0.3.13
+pillow==11.2.1
+
+# Testing
+pytest==8.4.1
+pytest-asyncio==0.26.0
+httpx==0.28.1
