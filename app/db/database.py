@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -178,7 +178,7 @@ def record_human_decision(
         "human_decision": human_decision,
         "human_reviewer": human_reviewer,
         "override_reason": override_reason,
-        "decided_at": datetime.utcnow().isoformat(),
+        "decided_at": datetime.now(timezone.utc).isoformat(),
     })
     conn.commit()
 

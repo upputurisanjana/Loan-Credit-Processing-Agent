@@ -1,6 +1,6 @@
 """Application intake and extracted-field data models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ class ApplicationRaw(BaseModel):
     """
 
     application_id: str = Field(..., description="Unique application identifier")
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     applicant_name: str = Field(..., description="Full legal name as stated by applicant")
     applicant_address: str = Field(..., description="Address as stated by applicant")
     documents: list[UploadedDocument] = Field(

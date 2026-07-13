@@ -18,7 +18,7 @@ Usage
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
 from langgraph.graph import StateGraph, END
@@ -377,15 +377,19 @@ def run_pipeline(raw: ApplicationRaw) -> "DecisionRecord | dict":
         return {
             "status": "hold_for_document",
             "application_id": raw.application_id,
+            "submitted_at": raw.submitted_at.isoformat(),
             "missing_docs": final_state["verify_result"].missing_docs,
             "consistency_flags": final_state["verify_result"].consistency_flags,
+            "pipeline_trace": final_state.get("pipeline_trace", []),
         }
 
     if status == "error":
         return {
             "status": "error",
             "application_id": raw.application_id,
+            "submitted_at": raw.submitted_at.isoformat(),
             "message": final_state.get("error_message", "Unknown error"),
+            "pipeline_trace": final_state.get("pipeline_trace", []),
         }
 
     # Both "pending_human_review" and "flag_fairness_fail" end up here
@@ -404,7 +408,7 @@ def run_pipeline(raw: ApplicationRaw) -> "DecisionRecord | dict":
         human_reviewer=None,
         override_reason=None,
         decided_at=None,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         pipeline_trace=final_state.get("pipeline_trace", []),
         missing_docs=verify_result.missing_docs if verify_result else [],
         consistency_flags=verify_result.consistency_flags if verify_result else [],
@@ -421,6 +425,6 @@ def _trace(state: AgentState, node: str, data: dict) -> None:
         state["pipeline_trace"] = []
     state["pipeline_trace"].append({
         "node": node,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         **data,
     })

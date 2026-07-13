@@ -44,5 +44,9 @@ class ChallengerResult(BaseModel):
     bands_agree: bool
     delta: float = Field(
         ...,
-        description="Absolute difference between primary and challenger composite scores",
+        description=(
+            "Integer band distance between primary and challenger bands: "
+            "0 = same band, 1 = one tier apart (approve↔refer or refer↔decline), "
+            "2 = two tiers apart (approve↔decline). Stored as float for model compatibility."
+        ),
     )

@@ -53,7 +53,7 @@ async def list_queue() -> list[dict]:
                 "application_id":         record.get("application_id", "unknown"),
                 "agent_recommendation":   None,
                 "status":                 record.get("status", "error"),
-                "created_at":             datetime.now(timezone.utc).isoformat(),
+                "created_at":             record.get("submitted_at", datetime.now(timezone.utc).isoformat()),
                 "composite_score":        0.0,
                 "band":                   "refer",
                 "policy_version":         "-",
