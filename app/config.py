@@ -34,6 +34,22 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
 
+    # CORS — comma-separated list of allowed origins.
+    # Dev default allows local frontend servers.
+    # Production: set ALLOWED_ORIGINS=https://your-app.example.com in .env
+    allowed_origins: str = (
+        "http://localhost:5173,"
+        "http://localhost:3000,"
+        "http://localhost:8000,"
+        "http://127.0.0.1:5173,"
+        "http://127.0.0.1:3000,"
+        "http://127.0.0.1:8000"
+    )
+
+    # Rate limiting
+    rate_limit_requests: int = 10   # max POST/PUT/PATCH requests per window per IP
+    rate_limit_window: int = 60     # window size in seconds
+
     def model_post_init(self, __context: object) -> None:
         """Inject loaded values into os.environ so sub-modules can use os.environ directly."""
         os.environ.setdefault("GITHUB_TOKEN", self.github_token)
@@ -42,6 +58,8 @@ class Settings(BaseSettings):
         os.environ.setdefault("CHALLENGER_MODEL", self.challenger_model)
         os.environ.setdefault("POLICY_PATH", self.policy_path)
         os.environ.setdefault("DATABASE_URL", self.database_url)
+        os.environ.setdefault("RATE_LIMIT_REQUESTS", str(self.rate_limit_requests))
+        os.environ.setdefault("RATE_LIMIT_WINDOW", str(self.rate_limit_window))
 
 
 @lru_cache(maxsize=1)

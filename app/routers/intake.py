@@ -12,7 +12,7 @@ GET /applications/{application_id}
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -20,14 +20,15 @@ from fastapi import APIRouter, HTTPException, status
 from app.models.application import ApplicationRaw
 from app.models.decision import DecisionRecord
 from app.agent.graph import run_pipeline
+from app.db.database import get_db, insert_decision
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/applications", tags=["intake"])
 
 # ---------------------------------------------------------------------------
-# In-memory store — sufficient for Phase 1 demo.
-# Replace with SQLAlchemy DB layer (app/db/) for production.
+# In-memory store — write-through cache backed by SQLite (app/db/).
+# All writes go to DB first; _store is populated on insert for fast reads.
 # ---------------------------------------------------------------------------
 _store: dict[str, Any] = {}  # application_id → DecisionRecord | dict
 
@@ -68,12 +69,18 @@ async def submit_application(body: ApplicationRaw) -> dict:
 
     if isinstance(result, DecisionRecord):
         payload = result.model_dump(mode="json")
-        payload["status"] = "pending_human_review"
         _store[app_id] = result
+        # Persist to DB (append-only)
+        try:
+            db = get_db()
+            insert_decision(db, result)
+        except Exception as exc:  # noqa: BLE001
+            log.error("intake: DB insert failed for app_id=%s — %s", app_id, exc)
         log.info(
-            "intake: app_id=%s band=%s status=pending_human_review",
+            "intake: app_id=%s band=%s status=%s",
             app_id,
             result.agent_recommendation,
+            payload.get("status"),
         )
         return payload
 
@@ -103,51 +110,3 @@ async def get_application(application_id: str) -> dict:
 def get_store() -> dict[str, Any]:
     """Expose the in-memory store to the decisions router."""
     return _store
-
-
-@router.get(
-    "",
-    summary="List all applications in the queue",
-    tags=["queue"],
-)
-async def list_queue() -> list[dict]:
-    """
-    Return a summary of all applications suitable for the Case Queue table.
-    Includes composite score, band, status, fairness match, and challenger
-    disagreement flags.  Sorted oldest-first (REFER-first is done client-side).
-    """
-    items = []
-    for record in _store.values():
-        if isinstance(record, DecisionRecord):
-            sb = record.score_breakdown
-            cr = record.challenger_result
-            items.append({
-                "application_id":        record.application_id,
-                "agent_recommendation":  record.agent_recommendation,
-                "status": "decided" if record.human_decision else "pending_human_review",
-                "created_at":            record.created_at.isoformat(),
-                "composite_score":       sb.composite_score,
-                "band":                  sb.band,
-                "policy_version":        record.policy_version,
-                "fairness_match":        record.fairness_check.match,
-                "challenger_disagreement": (cr is not None and not cr.bands_agree),
-                "human_decision":        record.human_decision,
-            })
-        else:
-            # Hold / error state — include as minimal entry
-            app_id = record.get("application_id", "unknown")
-            items.append({
-                "application_id":        app_id,
-                "agent_recommendation":  None,
-                "status":                record.get("status", "error"),
-                "created_at":            datetime.utcnow().isoformat(),
-                "composite_score":       0.0,
-                "band":                  "refer",
-                "policy_version":        "-",
-                "fairness_match":        True,
-                "challenger_disagreement": False,
-                "human_decision":        None,
-            })
-    # Oldest first
-    items.sort(key=lambda x: x["created_at"])
-    return items

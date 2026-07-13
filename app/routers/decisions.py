@@ -17,7 +17,7 @@ unmodified in the record.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.models.decision import DecisionRecord
 from app.routers.intake import get_store
+from app.db.database import get_db, record_human_decision as db_record_human_decision
 
 log = logging.getLogger(__name__)
 
@@ -90,15 +91,8 @@ async def get_decision(application_id: str) -> dict:
         # Hold or error state
         return record
 
-    return DecisionResponse(
-        application_id=record.application_id,
-        agent_recommendation=record.agent_recommendation,
-        human_decision=record.human_decision,
-        human_reviewer=record.human_reviewer,
-        override_reason=record.override_reason,
-        decided_at=record.decided_at.isoformat() if record.decided_at else None,
-        status="pending_human_review" if record.human_decision is None else "decided",
-    ).model_dump()
+    # Return full record so the frontend DecisionActionBar gets status
+    return record.model_dump(mode="json")
 
 
 @router.post(
@@ -161,7 +155,23 @@ async def record_human_decision(
     record.human_decision = body.human_decision
     record.human_reviewer = body.human_reviewer
     record.override_reason = body.override_reason
-    record.decided_at = datetime.utcnow()
+    record.decided_at = datetime.now(timezone.utc)
+
+    # Persist to DB
+    try:
+        db = get_db()
+        db_record_human_decision(
+            db,
+            application_id,
+            body.human_decision,
+            body.human_reviewer,
+            body.override_reason,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error(
+            "decision: DB update failed for app_id=%s — %s",
+            application_id, exc,
+        )
 
     log.info(
         "decision: app_id=%s agent_rec=%s human_decision=%s reviewer=%s override=%s",
@@ -172,12 +182,5 @@ async def record_human_decision(
         is_override,
     )
 
-    return DecisionResponse(
-        application_id=record.application_id,
-        agent_recommendation=record.agent_recommendation,
-        human_decision=record.human_decision,
-        human_reviewer=record.human_reviewer,
-        override_reason=record.override_reason,
-        decided_at=record.decided_at.isoformat(),
-        status="decided",
-    ).model_dump()
+    # Return the full record so the frontend can update all fields in one shot
+    return record.model_dump(mode="json")

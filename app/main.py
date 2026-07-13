@@ -18,6 +18,8 @@ from app.routers.intake import router as intake_router
 from app.routers.decisions import router as decisions_router
 from app.routers.queue import router as queue_router
 from app.routers.audit import router as audit_router
+from app.routers.amendments import router as amendments_router
+from app.middleware.rate_limit import RateLimitMiddleware
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -43,14 +45,21 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS — permit local frontend dev server (adjust origins for production)
+# CORS — origins are environment-controlled via ALLOWED_ORIGINS in .env
+# Dev default: localhost ports 5173/3000/8000
+# Production: set ALLOWED_ORIGINS=https://your-app.example.com
+_cors_origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting — protect LLM-heavy endpoints from quota exhaustion
+app.add_middleware(RateLimitMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers
@@ -59,6 +68,7 @@ app.include_router(intake_router)
 app.include_router(decisions_router)
 app.include_router(queue_router)
 app.include_router(audit_router)
+app.include_router(amendments_router)
 
 
 # ---------------------------------------------------------------------------
