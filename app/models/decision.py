@@ -25,6 +25,12 @@ class DecisionRecord(BaseModel):
     application_id: str
     policy_version: str
 
+    # Applicant details — captured at intake and surfaced to reviewers
+    applicant_name: str = Field(default="", description="Full legal name as stated by applicant")
+    applicant_address: str = Field(default="", description="Address as stated by applicant")
+    loan_amount_requested: float = Field(default=0.0, description="Requested loan amount")
+    applicant_notes: str | None = Field(None, description="Free-text note from applicant")
+
     # Agent pipeline outputs
     score_breakdown: ScoreBreakdown
     fairness_check: FairnessCheck
@@ -34,6 +40,11 @@ class DecisionRecord(BaseModel):
     adverse_action_draft: str | None = Field(
         None,
         description="LLM-drafted adverse-action notice, held for human edit. Only set on DECLINE.",
+    )
+    # Reviewer-approved version of the notice (after editing in NoticeEditor)
+    approved_notice_text: str | None = Field(
+        None,
+        description="Final notice text approved by the reviewer. Shown to applicant instead of raw draft.",
     )
 
     # Human gate — these fields start None and are filled by the underwriter
@@ -47,6 +58,13 @@ class DecisionRecord(BaseModel):
         ),
     )
     decided_at: datetime | None = None
+
+    # Request-more-information flow — set when reviewer requests clarification
+    # without finalising a decision. Status becomes "awaiting_information".
+    awaiting_info_items: list[str] = Field(
+        default_factory=list,
+        description="Items the reviewer has requested from the applicant before deciding.",
+    )
 
     # Metadata
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -73,6 +91,8 @@ class DecisionRecord(BaseModel):
         """
         if self.human_decision is not None:
             return "decided"
+        if self.awaiting_info_items:
+            return "awaiting_information"
         if self.fairness_check and not self.fairness_check.match:
             return "flag_fairness_fail"
         return "pending_human_review"

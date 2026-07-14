@@ -1,9 +1,11 @@
 # start.ps1 - Start the Credit Decisioning Agent (backend + frontend) on Windows
 #
 # Usage:
-#   .\start.ps1              # start backend + frontend (default)
+#   .\start.ps1              # start backend + React frontend (default)
 #   .\start.ps1 backend      # backend only
-#   .\start.ps1 frontend     # frontend only
+#   .\start.ps1 frontend     # React frontend only
+#   .\start.ps1 streamlit    # backend + Streamlit UI (app.py) on :8501
+#   .\start.ps1 all          # backend + React + Streamlit (all three)
 #   .\start.ps1 demo         # start both + auto-submit the clear_approve fixture
 #
 # If you see execution policy errors, run once as Admin:
@@ -19,12 +21,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Root         = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$BackendPort  = if ($env:BACKEND_PORT)  { $env:BACKEND_PORT  } else { "8000" }
-$FrontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "5173" }
-$Venv         = Join-Path $Root ".venv"
-$Frontend     = Join-Path $Root "frontend"
-$Uvicorn      = Join-Path $Venv "Scripts\uvicorn.exe"
+$Root          = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$BackendPort   = if ($env:BACKEND_PORT)   { $env:BACKEND_PORT   } else { "8000" }
+$FrontendPort  = if ($env:FRONTEND_PORT)  { $env:FRONTEND_PORT  } else { "5173" }
+$StreamlitPort = if ($env:STREAMLIT_PORT) { $env:STREAMLIT_PORT } else { "8501" }
+$Venv          = Join-Path $Root ".venv"
+$Frontend      = Join-Path $Root "frontend"
+$Uvicorn       = Join-Path $Venv "Scripts\uvicorn.exe"
+$StreamlitExe  = Join-Path $Venv "Scripts\streamlit.exe"
 
 function Info { param($msg) Write-Host "[info]  $msg" -ForegroundColor Cyan }
 function Ok   { param($msg) Write-Host "[ok]    $msg" -ForegroundColor Green }
@@ -99,7 +103,21 @@ function Start-Frontend {
     Ok "Frontend starting (job $($FrontendJob.Id)) - open http://localhost:${FrontendPort}"
 }
 
-# Wait for backend /health
+# Streamlit: run app.py as a background job
+$StreamlitJob = $null
+function Start-Streamlit {
+    if (-not (Test-Path $StreamlitExe)) {
+        Warn "streamlit not found in .venv - run: .venv\Scripts\pip install streamlit==1.45.1"
+        return
+    }
+    Info "Starting Streamlit UI on http://localhost:${StreamlitPort} ..."
+    $script:StreamlitJob = Start-Job -ScriptBlock {
+        param($streamlit, $port, $root)
+        Set-Location $root
+        & $streamlit run app.py --server.port $port --server.headless true --server.address 0.0.0.0
+    } -ArgumentList $StreamlitExe, $StreamlitPort, $Root
+    Ok "Streamlit starting (job $($StreamlitJob.Id)) - open http://localhost:${StreamlitPort}"
+}# Wait for backend /health
 function Wait-Backend {
     Info "Waiting for backend to be ready..."
     $attempts = 0
@@ -139,15 +157,17 @@ function Submit-Demo {
 
 # Stream job output to console
 function Receive-Jobs {
-    if ($BackendJob)  { Receive-Job -Job $BackendJob  -ErrorAction SilentlyContinue | Write-Host }
-    if ($FrontendJob) { Receive-Job -Job $FrontendJob -ErrorAction SilentlyContinue | Write-Host }
+    if ($BackendJob)   { Receive-Job -Job $BackendJob   -ErrorAction SilentlyContinue | Write-Host }
+    if ($FrontendJob)  { Receive-Job -Job $FrontendJob  -ErrorAction SilentlyContinue | Write-Host }
+    if ($StreamlitJob) { Receive-Job -Job $StreamlitJob -ErrorAction SilentlyContinue | Write-Host }
 }
 
 # Cleanup on Ctrl-C / exit
 function Stop-All {
     Info "Shutting down..."
-    if ($BackendJob)  { Stop-Job -Job $BackendJob;  Remove-Job -Job $BackendJob  -Force }
-    if ($FrontendJob) { Stop-Job -Job $FrontendJob; Remove-Job -Job $FrontendJob -Force }
+    if ($BackendJob)   { Stop-Job -Job $BackendJob;   Remove-Job -Job $BackendJob   -Force }
+    if ($FrontendJob)  { Stop-Job -Job $FrontendJob;  Remove-Job -Job $FrontendJob  -Force }
+    if ($StreamlitJob) { Stop-Job -Job $StreamlitJob; Remove-Job -Job $StreamlitJob -Force }
     Ok "Stopped."
 }
 
@@ -167,6 +187,37 @@ switch ($Mode) {
         try { while ($true) { Receive-Jobs; Start-Sleep -Seconds 2 } }
         finally { Stop-All }
     }
+    "streamlit" {
+        Start-Backend
+        Start-Streamlit
+        Wait-Backend
+        Write-Host ""
+        Write-Host "----------------------------------------------------" -ForegroundColor White
+        Write-Host "  Backend   ->  http://localhost:${BackendPort}/docs" -ForegroundColor Green
+        Write-Host "  Streamlit ->  http://localhost:${StreamlitPort}"    -ForegroundColor Cyan
+        Write-Host "----------------------------------------------------" -ForegroundColor White
+        Write-Host "  Press Ctrl-C to stop both servers." -ForegroundColor White
+        Write-Host ""
+        try { while ($true) { Receive-Jobs; Start-Sleep -Seconds 2 } }
+        finally { Stop-All }
+    }
+    "all" {
+        Start-Backend
+        Start-Frontend
+        Start-Streamlit
+        Wait-Backend
+        Write-Host ""
+        Write-Host "----------------------------------------------------" -ForegroundColor White
+        Write-Host "  Backend   ->  http://localhost:${BackendPort}/docs" -ForegroundColor Green
+        Write-Host "  React UI  ->  http://localhost:${FrontendPort}"     -ForegroundColor Green
+        Write-Host "  Streamlit ->  http://localhost:${StreamlitPort}"    -ForegroundColor Cyan
+        Write-Host "----------------------------------------------------" -ForegroundColor White
+        Write-Host "  Both UIs share the same backend store." -ForegroundColor White
+        Write-Host "  Press Ctrl-C to stop all servers." -ForegroundColor White
+        Write-Host ""
+        try { while ($true) { Receive-Jobs; Start-Sleep -Seconds 2 } }
+        finally { Stop-All }
+    }
     "demo" {
         Start-Backend
         Start-Frontend
@@ -180,9 +231,11 @@ switch ($Mode) {
         Start-Frontend
         Write-Host ""
         Write-Host "----------------------------------------------------" -ForegroundColor White
-        Write-Host "  Backend  ->  http://localhost:${BackendPort}/docs" -ForegroundColor Green
-        Write-Host "  Frontend ->  http://localhost:${FrontendPort}"     -ForegroundColor Green
+        Write-Host "  Backend  ->  http://localhost:${BackendPort}/docs"  -ForegroundColor Green
+        Write-Host "  React UI ->  http://localhost:${FrontendPort}"      -ForegroundColor Green
         Write-Host "----------------------------------------------------" -ForegroundColor White
+        Write-Host "  Streamlit UI: run  .\start.ps1 streamlit" -ForegroundColor White
+        Write-Host "  All three:    run  .\start.ps1 all" -ForegroundColor White
         Write-Host "  Press Ctrl-C to stop both servers." -ForegroundColor White
         Write-Host ""
         try { while ($true) { Receive-Jobs; Start-Sleep -Seconds 2 } }

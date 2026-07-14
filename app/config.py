@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 10   # max POST/PUT/PATCH requests per window per IP
     rate_limit_window: int = 60     # window size in seconds
 
+    # Lender identity — used in adverse action notices
+    lender_name: str = "Credit Decisioning Ltd"
+    lender_contact: str = "decisions@creditagent.example.com | 0800 123 4567"
+
     def model_post_init(self, __context: object) -> None:
         """Inject loaded values into os.environ so sub-modules can use os.environ directly."""
         os.environ.setdefault("GITHUB_TOKEN", self.github_token)
@@ -60,6 +64,8 @@ class Settings(BaseSettings):
         os.environ.setdefault("DATABASE_URL", self.database_url)
         os.environ.setdefault("RATE_LIMIT_REQUESTS", str(self.rate_limit_requests))
         os.environ.setdefault("RATE_LIMIT_WINDOW", str(self.rate_limit_window))
+        os.environ.setdefault("LENDER_NAME", self.lender_name)
+        os.environ.setdefault("LENDER_CONTACT", self.lender_contact)
 
 
 @lru_cache(maxsize=1)

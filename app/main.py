@@ -19,6 +19,8 @@ from app.routers.decisions import router as decisions_router
 from app.routers.queue import router as queue_router
 from app.routers.audit import router as audit_router
 from app.routers.amendments import router as amendments_router
+from app.routers.analysis import router as analysis_router
+from app.routers.documents import router as documents_router
 from app.middleware.rate_limit import RateLimitMiddleware
 
 # ---------------------------------------------------------------------------
@@ -69,6 +71,8 @@ app.include_router(decisions_router)
 app.include_router(queue_router)
 app.include_router(audit_router)
 app.include_router(amendments_router)
+app.include_router(analysis_router)
+app.include_router(documents_router)
 
 
 # ---------------------------------------------------------------------------
