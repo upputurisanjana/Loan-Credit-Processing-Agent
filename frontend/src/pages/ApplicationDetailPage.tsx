@@ -1,5 +1,11 @@
 /**
  * ApplicationDetailPage — the full underwriter decision workspace.
+ *
+ * Changes:
+ * - DocumentsPanel (upload) replaced with DocumentList (read-only + verify).
+ * - Applicant details section added (name, address, loan amount, notes).
+ * - NoticeEditor now saves text via API before the decision is submitted.
+ * - reviewer ID entered here flows into DocumentList for verification controls.
  */
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
@@ -11,10 +17,9 @@ import VerificationStrip   from "../components/VerificationStrip";
 import ScoreBar            from "../components/ScoreBar";
 import CompositeScoreGauge from "../components/CompositeScoreGauge";
 import ClauseCitationChip  from "../components/ClauseCitationChip";
-import FairnessCard        from "../components/FairnessCard";
-import ChallengerCard      from "../components/ChallengerCard";
 import DecisionActionBar   from "../components/DecisionActionBar";
 import NoticeEditor        from "../components/NoticeEditor";
+import DocumentList        from "../components/DocumentList";
 
 // ── Section card ──────────────────────────────────────────────────────────
 function Section({
@@ -26,18 +31,22 @@ function Section({
   id: string;
   label: string;
   children: React.ReactNode;
-  accent?: "danger" | "warning";
+  accent?: "danger" | "warning" | "success";
 }) {
   const headerCls = accent === "danger"
     ? "bg-red-50 border-b border-red-100"
     : accent === "warning"
     ? "bg-amber-50 border-b border-amber-100"
+    : accent === "success"
+    ? "bg-green-50 border-b border-green-100"
     : "border-b border-slate-100 bg-slate-50/50";
 
   const titleCls = accent === "danger"
     ? "text-red-600"
     : accent === "warning"
     ? "text-amber-700"
+    : accent === "success"
+    ? "text-green-700"
     : "text-slate-500";
 
   return (
@@ -52,6 +61,17 @@ function Section({
       </div>
       <div className="px-5 py-4">{children}</div>
     </section>
+  );
+}
+
+// ── KV row for applicant details ──────────────────────────────────────────
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-3 py-1.5 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-400 w-36 flex-shrink-0">{label}</span>
+      <span className="text-sm text-slate-800">{value}</span>
+    </div>
   );
 }
 
@@ -89,10 +109,10 @@ function ClauseDrawer({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
             aria-label="Close clause drawer"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </button>
@@ -113,6 +133,8 @@ export default function ApplicationDetailPage() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [activeClause, setClause] = useState<string | null>(null);
+  // Reviewer ID entered in the action bar flows to DocumentList for verification
+  const [reviewerId, setReviewerId] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -137,7 +159,7 @@ export default function ApplicationDetailPage() {
         <div className="skeleton h-6 w-40 mb-5" />
         <div className="skeleton h-8 w-64 mb-8" />
         <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
+          {[...Array(5)].map((_, i) => (
             <div key={i} className="skeleton h-28 rounded-lg" />
           ))}
         </div>
@@ -145,7 +167,6 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  // ── Error ────────────────────────────────────────────────────────────
   if (error || !record) {
     return (
       <div className="max-w-3xl mx-auto px-8 py-20 text-center">
@@ -153,10 +174,7 @@ export default function ApplicationDetailPage() {
         <p className="text-sm font-medium text-red-600 mb-3" role="alert">
           {error ?? "Application not found."}
         </p>
-        <button
-          onClick={() => navigate("/")}
-          className="text-sm text-blue-600 hover:underline"
-        >
+        <button onClick={() => navigate("/")} className="text-sm text-blue-600 hover:underline">
           ← Back to queue
         </button>
       </div>
@@ -187,7 +205,7 @@ export default function ApplicationDetailPage() {
           to="/"
           className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 mb-5 transition-colors group"
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
                className="group-hover:-translate-x-0.5 transition-transform">
             <path d="M8 2L4 6L8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -212,7 +230,40 @@ export default function ApplicationDetailPage() {
           </div>
         </div>
 
-        {/* ── 2. Verification ───────────────────────────────────────── */}
+        {/* Awaiting info banner */}
+        {record.status === "awaiting_information" && record.awaiting_info_items.length > 0 && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs font-semibold text-amber-800 mb-1">⏳ Awaiting information from applicant:</p>
+            <ul className="space-y-0.5">
+              {record.awaiting_info_items.map((item, i) => (
+                <li key={i} className="text-xs text-amber-700">· {item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ── 2. Applicant Details ──────────────────────────────────── */}
+        <div className="mb-4">
+          <Section id="applicant-heading" label="Applicant Details">
+            <div className="space-y-0">
+              <DetailRow label="Full Name"        value={record.applicant_name || "—"} />
+              <DetailRow label="Address"          value={record.applicant_address || "—"} />
+              <DetailRow
+                label="Loan Requested"
+                value={
+                  record.loan_amount_requested > 0
+                    ? `£${record.loan_amount_requested.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
+                    : "—"
+                }
+              />
+              {record.applicant_notes && (
+                <DetailRow label="Applicant Notes" value={record.applicant_notes} />
+              )}
+            </div>
+          </Section>
+        </div>
+
+        {/* ── 3. Verification ───────────────────────────────────────── */}
         <div className="mb-4">
           <VerificationStrip
             missingDocs={record.missing_docs}
@@ -220,7 +271,7 @@ export default function ApplicationDetailPage() {
           />
         </div>
 
-        {/* ── 3. Score Breakdown ────────────────────────────────────── */}
+        {/* ── 4. Score Breakdown ────────────────────────────────────── */}
         <div className="mb-4">
           <Section id="score-heading" label="Score Breakdown">
             <CompositeScoreGauge composite={sb.composite_score} band={sb.band} />
@@ -257,7 +308,7 @@ export default function ApplicationDetailPage() {
           </Section>
         </div>
 
-        {/* ── 4. Agent Recommendation ───────────────────────────────── */}
+        {/* ── 5. Agent Recommendation ───────────────────────────────── */}
         <div className="mb-4">
           <Section id="rec-heading" label="Agent Recommendation">
             <div className="flex items-center gap-4 mb-4">
@@ -269,9 +320,7 @@ export default function ApplicationDetailPage() {
                 </span>
               </span>
             </div>
-            <p className="text-sm leading-relaxed text-slate-700 mb-4">
-              {record.rationale}
-            </p>
+            <p className="text-sm leading-relaxed text-slate-700 mb-4">{record.rationale}</p>
             {sb.clause_citations.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100">
                 <span className="text-xs text-slate-400 self-center mr-1">Policy clauses:</span>
@@ -281,12 +330,6 @@ export default function ApplicationDetailPage() {
               </div>
             )}
           </Section>
-        </div>
-
-        {/* ── 5. Fairness & Challenger ──────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <FairnessCard check={record.fairness_check} />
-          <ChallengerCard result={record.challenger_result} />
         </div>
 
         {/* ── 6. Counterfactual ─────────────────────────────────────── */}
@@ -299,9 +342,26 @@ export default function ApplicationDetailPage() {
         {/* ── 7. Adverse Action Notice ──────────────────────────────── */}
         {(record.agent_recommendation === "decline" || record.adverse_action_draft) && (
           <div className="mb-4">
-            <NoticeEditor record={record} />
+            <NoticeEditor
+              record={record}
+              onNoticeApproved={(updated) => setRecord(updated)}
+            />
           </div>
         )}
+
+        {/* ── 8. Supporting Documents (reviewer view — read-only + verify) */}
+        <div className="mb-4">
+          <Section id="docs-heading" label="Supporting Documents">
+            <div className="mb-3 p-2.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              <strong>Reviewer:</strong> Review each document below and mark it as verified or rejected.
+              Documents are uploaded by the applicant — you cannot upload here.
+            </div>
+            <DocumentList
+              applicationId={record.application_id}
+              reviewerId={reviewerId}
+            />
+          </Section>
+        </div>
 
         {/* Audit trail link */}
         <div className="text-right pt-1">
@@ -310,15 +370,19 @@ export default function ApplicationDetailPage() {
             className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
           >
             View full pipeline trace
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 5H8M6 3L8 5L6 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </Link>
         </div>
       </div>
 
-      {/* Sticky decision bar */}
-      <DecisionActionBar record={record} onDecisionMade={setRecord} />
+      {/* Sticky decision bar — passes reviewerId setter so DocumentList can use it */}
+      <DecisionActionBar
+        record={record}
+        onDecisionMade={setRecord}
+        onReviewerIdChange={setReviewerId}
+      />
 
       {/* Policy clause drawer */}
       <ClauseDrawer

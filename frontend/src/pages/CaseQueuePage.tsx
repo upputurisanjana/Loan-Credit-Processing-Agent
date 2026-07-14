@@ -62,10 +62,12 @@ export default function CaseQueuePage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const pending   = items.filter((i) => i.status === "pending_human_review" || i.status === "flag_fairness_fail").length;
+  const pending   = items.filter((i) =>
+    i.status === "pending_human_review" ||
+    i.status === "flag_fairness_fail" ||
+    i.status === "awaiting_information"
+  ).length;
   const decided   = items.filter((i) => i.status === "decided").length;
-  const fairFlags = items.filter((i) => !i.fairness_match).length;
-  const chalFlags = items.filter((i) => i.challenger_disagreement).length;
 
   return (
     <div className="px-8 py-6 max-w-6xl mx-auto">
@@ -91,16 +93,10 @@ export default function CaseQueuePage() {
 
       {/* ── Stat cards ─────────────────────────────────────────────── */}
       {!loading && items.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <StatCard label="Total"          value={items.length}             sub="all applications"       variant="default" />
-          <StatCard label="Pending Review" value={pending}                  sub="awaiting underwriter"   variant="warning" />
-          <StatCard label="Decided"        value={decided}                  sub="completed"              variant="success" />
-          <StatCard
-            label="Flags"
-            value={fairFlags + chalFlags}
-            sub={`${fairFlags} fairness · ${chalFlags} challenger`}
-            variant={fairFlags + chalFlags > 0 ? "danger" : "default"}
-          />
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <StatCard label="Total"          value={items.length}  sub="all applications"     variant="default" />
+          <StatCard label="Pending Review" value={pending}       sub="awaiting underwriter" variant="warning" />
+          <StatCard label="Decided"        value={decided}       sub="completed"            variant="success" />
         </div>
       )}
 
