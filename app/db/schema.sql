@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS decision_records (
     application_id          TEXT    NOT NULL UNIQUE,
     policy_version          TEXT    NOT NULL,
 
+    -- Applicant details (captured at intake, surfaced to reviewers)
+    applicant_name          TEXT    NOT NULL DEFAULT '',
+    applicant_address       TEXT    NOT NULL DEFAULT '',
+    loan_amount_requested   REAL    NOT NULL DEFAULT 0.0,
+    applicant_notes         TEXT,               -- NULL if applicant left blank
+
     -- Score breakdown (stored as JSON blob for portability)
     score_breakdown_json    TEXT    NOT NULL,
 
@@ -34,11 +40,17 @@ CREATE TABLE IF NOT EXISTS decision_records (
     rationale               TEXT    NOT NULL,
     adverse_action_draft    TEXT,               -- NULL unless DECLINE path
 
+    -- Reviewer-approved notice text (after editing in NoticeEditor)
+    approved_notice_text    TEXT,               -- NULL until reviewer approves
+
     -- Human gate (nullable until underwriter acts — the only allowed update)
     human_decision          TEXT,               -- approve | refer | decline | NULL
     human_reviewer          TEXT,
     override_reason         TEXT,               -- required when overriding
     decided_at              TEXT,               -- ISO-8601
+
+    -- Request-more-information items (JSON list of strings)
+    awaiting_info_items     TEXT    NOT NULL DEFAULT '[]',
 
     -- Metadata
     created_at              TEXT    NOT NULL,   -- ISO-8601, set at insert

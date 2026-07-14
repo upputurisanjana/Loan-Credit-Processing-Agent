@@ -7,8 +7,11 @@ Rules enforced here
 2. The ONLY UPDATE allowed on decision_records is recording the human
    gate decision (human_decision, human_reviewer, override_reason,
    decided_at) — and only when human_decision is currently NULL.
-3. No DELETE statement touches decision_records or decision_amendments.
-4. Corrections always go to decision_amendments as a new linked row.
+3. The approved_notice_text column may be updated independently by the
+   reviewer via the /notice endpoint (before or after human_decision is set).
+4. The awaiting_info_items column may be updated when reviewer requests info.
+5. No DELETE statement touches decision_records or decision_amendments.
+6. Corrections always go to decision_amendments as a new linked row.
 
 Usage
 -----
@@ -59,6 +62,7 @@ def get_db(db_url: Optional[str] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     _ensure_schema(conn)
+    _migrate_schema(conn)
     return conn
 
 
@@ -67,6 +71,29 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     schema = _SCHEMA_PATH.read_text(encoding="utf-8")
     conn.executescript(schema)
     conn.commit()
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """
+    Apply additive migrations to existing databases.
+    Each ALTER TABLE is wrapped in a try/except so it is a no-op if the
+    column already exists (SQLite does not support IF NOT EXISTS for columns).
+    """
+    migrations = [
+        "ALTER TABLE decision_records ADD COLUMN applicant_name TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE decision_records ADD COLUMN applicant_address TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE decision_records ADD COLUMN loan_amount_requested REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE decision_records ADD COLUMN applicant_notes TEXT",
+        "ALTER TABLE decision_records ADD COLUMN approved_notice_text TEXT",
+        "ALTER TABLE decision_records ADD COLUMN awaiting_info_items TEXT NOT NULL DEFAULT '[]'",
+    ]
+    for sql in migrations:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists — skip silently
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +112,10 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
         INSERT INTO decision_records (
             application_id,
             policy_version,
+            applicant_name,
+            applicant_address,
+            loan_amount_requested,
+            applicant_notes,
             score_breakdown_json,
             fairness_match,
             fairness_original_band,
@@ -94,15 +125,21 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
             agent_recommendation,
             rationale,
             adverse_action_draft,
+            approved_notice_text,
             human_decision,
             human_reviewer,
             override_reason,
             decided_at,
+            awaiting_info_items,
             created_at,
             immutable
         ) VALUES (
             :application_id,
             :policy_version,
+            :applicant_name,
+            :applicant_address,
+            :loan_amount_requested,
+            :applicant_notes,
             :score_breakdown_json,
             :fairness_match,
             :fairness_original_band,
@@ -112,10 +149,12 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
             :agent_recommendation,
             :rationale,
             :adverse_action_draft,
+            :approved_notice_text,
             :human_decision,
             :human_reviewer,
             :override_reason,
             :decided_at,
+            :awaiting_info_items,
             :created_at,
             1
         )
@@ -123,6 +162,10 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
     params = {
         "application_id": record.application_id,
         "policy_version": record.policy_version,
+        "applicant_name": record.applicant_name,
+        "applicant_address": record.applicant_address,
+        "loan_amount_requested": record.loan_amount_requested,
+        "applicant_notes": record.applicant_notes,
         "score_breakdown_json": record.score_breakdown.model_dump_json(),
         "fairness_match": int(record.fairness_check.match),
         "fairness_original_band": record.fairness_check.original_band,
@@ -132,10 +175,12 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
         "agent_recommendation": record.agent_recommendation,
         "rationale": record.rationale,
         "adverse_action_draft": record.adverse_action_draft,
+        "approved_notice_text": record.approved_notice_text,
         "human_decision": record.human_decision,
         "human_reviewer": record.human_reviewer,
         "override_reason": record.override_reason,
         "decided_at": record.decided_at.isoformat() if record.decided_at else None,
+        "awaiting_info_items": json.dumps(record.awaiting_info_items),
         "created_at": record.created_at.isoformat(),
     }
     try:
@@ -157,7 +202,7 @@ def record_human_decision(
     override_reason: Optional[str],
 ) -> None:
     """
-    The ONLY UPDATE allowed on decision_records.
+    The ONLY UPDATE allowed on decision_records for the human gate.
 
     Updates human_decision, human_reviewer, override_reason, decided_at
     when the underwriter acts at the human gate.  Only runs if
@@ -191,6 +236,59 @@ def record_human_decision(
         "db: human_decision recorded app_id=%s decision=%s reviewer=%s",
         application_id, human_decision, human_reviewer,
     )
+
+
+def update_approved_notice(
+    conn: sqlite3.Connection,
+    application_id: str,
+    approved_notice_text: str,
+) -> None:
+    """
+    Store the reviewer-approved version of the adverse action notice.
+    May be called before or after the human_decision is recorded.
+    """
+    sql = """
+        UPDATE decision_records
+        SET approved_notice_text = :notice_text
+        WHERE application_id = :application_id
+    """
+    cursor = conn.execute(sql, {
+        "application_id": application_id,
+        "notice_text": approved_notice_text,
+    })
+    conn.commit()
+    if cursor.rowcount == 0:
+        raise ValueError(f"Application {application_id!r} not found.")
+    log.info("db: approved_notice_text updated for app_id=%s", application_id)
+
+
+def update_awaiting_info(
+    conn: sqlite3.Connection,
+    application_id: str,
+    items: list[str],
+) -> None:
+    """
+    Store the list of items the reviewer has requested from the applicant.
+    Clears awaiting_info_items when called with an empty list (i.e. when
+    the applicant has responded and the reviewer resumes review).
+    """
+    sql = """
+        UPDATE decision_records
+        SET awaiting_info_items = :items_json
+        WHERE application_id = :application_id
+          AND human_decision IS NULL
+    """
+    cursor = conn.execute(sql, {
+        "application_id": application_id,
+        "items_json": json.dumps(items),
+    })
+    conn.commit()
+    if cursor.rowcount == 0:
+        raise ValueError(
+            f"Cannot update awaiting_info for {application_id!r}: "
+            "record not found or already decided."
+        )
+    log.info("db: awaiting_info_items updated for app_id=%s (%d items)", application_id, len(items))
 
 
 def insert_amendment(conn: sqlite3.Connection, amendment: DecisionAmendment) -> None:
@@ -244,6 +342,13 @@ def fetch_decision(
         (application_id,),
     ).fetchone()
     return row
+
+
+def fetch_all_decisions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return all decision_records rows, oldest first."""
+    return conn.execute(
+        "SELECT * FROM decision_records ORDER BY created_at ASC"
+    ).fetchall()
 
 
 def fetch_amendments(
