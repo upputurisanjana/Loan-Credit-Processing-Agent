@@ -29,6 +29,11 @@ const CONFIG: Record<string, { label: string; cls: string; dot: string }> = {
     cls:   "bg-amber-50 text-amber-700 border-amber-200",
     dot:   "bg-amber-400",
   },
+  awaiting_information: {
+    label: "Awaiting Info",
+    cls:   "bg-purple-50 text-purple-700 border-purple-200",
+    dot:   "bg-purple-400",
+  },
   hold_for_document: {
     label: "Hold – Docs",
     cls:   "bg-slate-100 text-slate-600 border-slate-200",

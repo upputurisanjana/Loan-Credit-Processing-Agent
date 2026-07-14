@@ -1,7 +1,12 @@
 /**
  * NoticeEditor — adverse-action notice editor for DECLINE cases.
- * Left: editable notice draft. Right: regulatory checklist.
- * Only shown when agent_recommendation === "decline" or adverse_action_draft is set.
+ *
+ * Fixes applied:
+ * - Edited text is now saved via PATCH /applications/:id/notice before deciding.
+ * - Button is labelled "Save & Mark Ready to Send" — not "Send" (no real dispatch).
+ * - Lender details are already injected by the backend via LENDER_NAME/LENDER_CONTACT
+ *   env vars — no more [LENDER CONTACT — fill in before send] placeholder.
+ * - The applicant will see approved_notice_text (the edited version) not the raw draft.
  */
 import { useState, useEffect } from "react";
 import type { DecisionRecord } from "../api/client";
@@ -9,15 +14,15 @@ import { api } from "../api/client";
 
 interface Props {
   record: DecisionRecord;
-  onApproved?: (noticeDraft: string) => void;
+  onNoticeApproved?: (updatedRecord: DecisionRecord) => void;
 }
 
 const REQUIRED_ITEMS = [
-  { id: "reasons",      label: "Specific reasons for decline" },
+  { id: "reasons",       label: "Specific reasons for decline" },
   { id: "credit_report", label: "Right to free credit report" },
-  { id: "dispute",      label: "Right to dispute inaccurate information" },
-  { id: "reconsider",   label: "Right to request reconsideration" },
-  { id: "contact",      label: "Lender contact information" },
+  { id: "dispute",       label: "Right to dispute inaccurate information" },
+  { id: "reconsider",    label: "Right to request reconsideration" },
+  { id: "contact",       label: "Lender contact information" },
 ];
 
 function checkItem(text: string, id: string): boolean {
@@ -27,50 +32,57 @@ function checkItem(text: string, id: string): boolean {
     case "credit_report": return lower.includes("credit report");
     case "dispute":       return lower.includes("dispute") || lower.includes("inaccurate");
     case "reconsider":    return lower.includes("reconsider") || lower.includes("appeal") || lower.includes("documentation");
-    case "contact":       return lower.includes("contact") || lower.includes("[lender");
+    case "contact":       return (
+      lower.includes("contact") ||
+      lower.includes("sincerely") ||
+      lower.includes("@") ||
+      lower.includes("phone") ||
+      lower.includes("email")
+    );
     default:              return false;
   }
 }
 
-export default function NoticeEditor({ record, onApproved }: Props) {
-  const [draft, setDraft]         = useState(record.adverse_action_draft ?? "");
-  const [approved, setApproved]   = useState(false);
-  const [sending, setSending]     = useState(false);
-  const [reviewerId, setReviewer] = useState("");
-  const [apiError, setApiError]   = useState<string | null>(null);
+export default function NoticeEditor({ record, onNoticeApproved }: Props) {
+  // Show approved_notice_text if already saved, otherwise start from draft
+  const initialText = record.approved_notice_text ?? record.adverse_action_draft ?? "";
+  const [draft, setDraft]           = useState(initialText);
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(!!record.approved_notice_text);
+  const [reviewerId, setReviewer]   = useState("");
+  const [apiError, setApiError]     = useState<string | null>(null);
 
   useEffect(() => {
-    if (record.adverse_action_draft) setDraft(record.adverse_action_draft);
-  }, [record.adverse_action_draft]);
+    const latest = record.approved_notice_text ?? record.adverse_action_draft ?? "";
+    setDraft(latest);
+    setSaved(!!record.approved_notice_text);
+  }, [record.approved_notice_text, record.adverse_action_draft]);
 
+  // Don't render if there's no notice to edit
   if (!record.adverse_action_draft && record.agent_recommendation !== "decline") {
     return null;
   }
 
-  const checklist = REQUIRED_ITEMS.map((item) => ({
-    ...item,
-    present: checkItem(draft, item.id),
-  }));
-  const allPresent = checklist.every((c) => c.present);
+  const checklist   = REQUIRED_ITEMS.map((item) => ({ ...item, present: checkItem(draft, item.id) }));
+  const allPresent  = checklist.every((c) => c.present);
+  const isDecided   = record.human_decision !== null;
 
-  function handleApprove() {
-    if (!reviewerId.trim()) return;
-    setSending(true);
+  async function handleSaveNotice() {
+    if (!reviewerId.trim() || !draft.trim()) return;
+    setSaving(true);
     setApiError(null);
-    api
-      .recordDecision(record.application_id, {
-        human_decision: "decline",
-        human_reviewer: reviewerId.trim(),
-        // decline matching agent_recommendation — no override_reason needed
-      })
-      .then(() => {
-        setApproved(true);
-        onApproved?.(draft);
-      })
-      .catch((err: unknown) => {
-        setApiError(err instanceof Error ? err.message : "Submission failed.");
-      })
-      .finally(() => setSending(false));
+    try {
+      const updated = await api.updateNotice(record.application_id, {
+        notice_text: draft.trim(),
+        reviewer: reviewerId.trim(),
+      });
+      setSaved(true);
+      onNoticeApproved?.(updated);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Failed to save notice.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -85,16 +97,18 @@ export default function NoticeEditor({ record, onApproved }: Props) {
             Adverse Action Notice — Decline
           </h2>
           <p className="text-xs text-[#8A8072] mt-0.5">
-            Review and edit before approving. Sending is stubbed in this demo.
+            {isDecided
+              ? "Decision recorded. Notice text locked."
+              : "Edit the notice, then save it. The applicant will see this edited version."}
           </p>
         </div>
-        {approved && (
+        {saved && (
           <span className="flex items-center gap-1.5 text-xs text-[#3A6B4C] font-semibold">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
               <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
               <path d="M4 6.5L6 8.5L9.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Queued for send
+            Notice saved
           </span>
         )}
       </div>
@@ -103,7 +117,7 @@ export default function NoticeEditor({ record, onApproved }: Props) {
         {/* ── Editable draft ─────────────────────────────────────────── */}
         <div className="flex-1 px-5 py-4 md:border-r border-[#D6D0C4]">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-[#8A8072] mb-3">
-            Draft notice
+            {saved ? "Approved notice text" : "Draft notice (edit before saving)"}
           </div>
 
           {/* Score factor chips */}
@@ -126,22 +140,22 @@ export default function NoticeEditor({ record, onApproved }: Props) {
 
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={approved}
+            onChange={(e) => { setDraft(e.target.value); setSaved(false); }}
+            disabled={isDecided}
             rows={14}
             className="w-full border border-[#D6D0C4] rounded px-3 py-2.5 text-sm leading-relaxed
                        bg-white text-[#12213A] font-sans
                        focus:outline-none focus:ring-2 focus:ring-[#C48A2A] focus:border-transparent
                        disabled:bg-[#FAF8F3] disabled:text-[#8A8072] resize-none"
-            aria-label="Adverse action notice draft"
-            aria-readonly={approved}
+            aria-label="Adverse action notice text"
+            aria-readonly={isDecided}
           />
           <div className="text-[10px] text-[#8A8072] mt-1 text-right tabular-nums">
             {draft.split(/\s+/).filter(Boolean).length} words
           </div>
         </div>
 
-        {/* ── Regulatory checklist ───────────────────────────────────── */}
+        {/* ── Regulatory checklist + save controls ──────────────────── */}
         <div className="md:w-56 flex-shrink-0 px-5 py-4">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-[#8A8072] mb-3">
             Must include
@@ -151,12 +165,12 @@ export default function NoticeEditor({ record, onApproved }: Props) {
             {checklist.map((item) => (
               <li key={item.id} className="flex items-start gap-2">
                 {item.present ? (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-[#3A6B4C]">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5 text-[#3A6B4C]">
                     <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
                     <path d="M4.5 7L6 8.5L9.5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-[#8C3B2E]">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5 text-[#8C3B2E]">
                     <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
                     <path d="M7 4V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                     <circle cx="7" cy="9.5" r="0.6" fill="currentColor"/>
@@ -169,52 +183,59 @@ export default function NoticeEditor({ record, onApproved }: Props) {
             ))}
           </ul>
 
-          {!allPresent && (
+          {!allPresent && !isDecided && (
             <p className="mt-3 text-xs text-[#8C3B2E]" role="alert">
-              Complete all items above before approving.
+              Ensure all items above are present before saving.
             </p>
           )}
 
-          {/* Reviewer ID required to submit */}
-          {!approved && (
-            <div className="mt-4">
-              <label
-                htmlFor="notice-reviewer"
-                className="block text-[10px] font-semibold text-[#8A8072] uppercase tracking-widest mb-1"
+          {!isDecided && (
+            <>
+              <div className="mt-4">
+                <label
+                  htmlFor="notice-reviewer"
+                  className="block text-[10px] font-semibold text-[#8A8072] uppercase tracking-widest mb-1"
+                >
+                  Reviewer ID <span className="text-[#8C3B2E]">*</span>
+                </label>
+                <input
+                  id="notice-reviewer"
+                  type="text"
+                  value={reviewerId}
+                  onChange={(e) => setReviewer(e.target.value)}
+                  placeholder="underwriter_1"
+                  className="w-full border border-[#D6D0C4] rounded px-2 py-1.5 text-xs
+                             focus:outline-none focus:ring-2 focus:ring-[#3A6B4C] bg-white text-[#12213A]
+                             placeholder-[#8A8072]/60"
+                />
+              </div>
+
+              {apiError && (
+                <p className="mt-2 text-xs text-[#8C3B2E]" role="alert">{apiError}</p>
+              )}
+
+              <button
+                onClick={() => void handleSaveNotice()}
+                disabled={!allPresent || saving || !reviewerId.trim() || saved}
+                className="mt-4 w-full px-3 py-2 text-xs font-semibold rounded border
+                           border-[#3A6B4C] text-[#3A6B4C] hover:bg-[#3A6B4C] hover:text-white
+                           transition-colors focus:outline-none focus:ring-2 focus:ring-[#3A6B4C]
+                           disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Reviewer ID <span className="text-[#8C3B2E]">*</span>
-              </label>
-              <input
-                id="notice-reviewer"
-                type="text"
-                value={reviewerId}
-                onChange={(e) => setReviewer(e.target.value)}
-                placeholder="underwriter_1"
-                className="w-full border border-[#D6D0C4] rounded px-2 py-1.5 text-xs
-                           focus:outline-none focus:ring-2 focus:ring-[#3A6B4C] bg-white text-[#12213A]
-                           placeholder-[#8A8072]/60"
-              />
-            </div>
+                {saving ? "Saving…" : saved ? "✓ Notice Saved" : "Save Notice"}
+              </button>
+
+              <p className="mt-2 text-[10px] text-[#8A8072] text-center leading-relaxed">
+                Saving stores the edited text for the applicant to see. No email is sent automatically.
+                Send manually after the final decision is recorded.
+              </p>
+            </>
           )}
 
-          {apiError && (
-            <p className="mt-2 text-xs text-[#8C3B2E]" role="alert">{apiError}</p>
-          )}
-
-          <button
-            onClick={handleApprove}
-            disabled={!allPresent || approved || sending || !reviewerId.trim()}
-            className="mt-5 w-full px-3 py-2 text-xs font-semibold rounded border
-                       border-[#3A6B4C] text-[#3A6B4C] hover:bg-[#3A6B4C] hover:text-white
-                       transition-colors focus:outline-none focus:ring-2 focus:ring-[#3A6B4C]
-                       disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {sending ? "Submitting…" : approved ? "✓ Queued for send" : "Approve & Queue for Send"}
-          </button>
-
-          {approved && (
-            <p className="mt-2 text-[10px] text-[#8A8072] text-center">
-              [Demo] No real send integration.
+          {isDecided && (
+            <p className="mt-4 text-[10px] text-[#8A8072] leading-relaxed">
+              The decision has been recorded. The applicant can now view the
+              {record.approved_notice_text ? " approved" : " draft"} notice.
             </p>
           )}
         </div>

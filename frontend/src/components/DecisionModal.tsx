@@ -1,9 +1,12 @@
 /**
  * DecisionModal — Approve / Override / Request-more-info variants.
- * Approve: single confirm, no reason needed.
- * Override: reason field required (min 20 chars).
- * Request more info: checklist from missingDocs + consistencyFlags.
- * All variants show permanent audit trail notice.
+ *
+ * Fixes applied:
+ * - request_info now calls POST /request-info (not /decision with refer).
+ *   The selected checklist items are sent as requested_items to the backend.
+ *   Status becomes awaiting_information without finalising the decision.
+ * - Approve: single confirm, no reason needed.
+ * - Override: reason field required (min 20 chars).
  */
 import { useEffect, useRef, useState } from "react";
 import type { Band, DecisionRecord } from "../api/client";
@@ -24,12 +27,6 @@ const VARIANT_TITLES: Record<ModalVariant, string> = {
   request_info: "Request Additional Information",
 };
 
-const VARIANT_DECISION: Record<ModalVariant, Band> = {
-  approve:      "approve",
-  override:     "decline",
-  request_info: "refer",
-};
-
 const VARIANT_ACCENT: Record<ModalVariant, { ring: string; btn: string }> = {
   approve:      { ring: "focus:ring-[#3A6B4C]", btn: "border-[#3A6B4C] text-[#3A6B4C] hover:bg-[#3A6B4C] hover:text-white" },
   override:     { ring: "focus:ring-[#8C3B2E]", btn: "border-[#8C3B2E] text-[#8C3B2E] hover:bg-[#8C3B2E] hover:text-white" },
@@ -40,7 +37,8 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
   const [reviewer, setReviewer]         = useState("");
   const [reason, setReason]             = useState("");
   const [overrideTo, setOverrideTo]     = useState<Band>("decline");
-  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [customItem, setCustomItem]     = useState("");
   const [submitting, setSubmitting]     = useState(false);
   const [error, setError]               = useState<string | null>(null);
 
@@ -53,18 +51,32 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const decision: Band        = variant === "override" ? overrideTo : VARIANT_DECISION[variant];
-  const isOverride            = variant === "override" || decision !== record.agent_recommendation;
-  const reasonTooShort        = isOverride && reason.trim().length < 20;
-  const canSubmit             = reviewer.trim().length > 0 && !reasonTooShort;
+  const decision: Band = variant === "override" ? overrideTo : "approve";
+  const isOverride     = variant === "override" || (variant === "approve" && decision !== record.agent_recommendation);
+  const reasonTooShort = isOverride && reason.trim().length < 20;
+
+  // For request_info: need at least one item selected
+  const canSubmitRequestInfo = variant === "request_info"
+    ? reviewer.trim().length > 0 && (selectedItems.length > 0 || customItem.trim().length > 0)
+    : false;
+  const canSubmit = variant === "request_info"
+    ? canSubmitRequestInfo
+    : reviewer.trim().length > 0 && !reasonTooShort;
 
   const missingDocs      = record.missing_docs ?? [];
   const consistencyFlags = record.consistency_flags ?? [];
-  const checklistItems   = [...missingDocs, ...consistencyFlags];
-  const accent           = VARIANT_ACCENT[variant];
+  // Pre-populate checklist from known issues + current awaiting items
+  const knownItems       = [
+    ...missingDocs.map((d) => `Missing document: ${d.replace(/_/g, " ")}`),
+    ...consistencyFlags,
+    ...record.awaiting_info_items.filter(
+      (i) => !missingDocs.includes(i) && !consistencyFlags.includes(i)
+    ),
+  ];
+  const accent = VARIANT_ACCENT[variant];
 
-  function toggleDoc(item: string) {
-    setSelectedDocs((prev) =>
+  function toggleItem(item: string) {
+    setSelectedItems((prev) =>
       prev.includes(item) ? prev.filter((d) => d !== item) : [...prev, item]
     );
   }
@@ -74,13 +86,29 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+
     try {
-      const updated = await api.recordDecision(record.application_id, {
-        human_decision:  decision,
-        human_reviewer:  reviewer.trim(),
-        override_reason: isOverride ? reason.trim() : undefined,
-      });
-      onSuccess(updated as DecisionRecord);
+      if (variant === "request_info") {
+        // Build final list: checked items + any custom item
+        const items = [
+          ...selectedItems,
+          ...(customItem.trim() ? [customItem.trim()] : []),
+        ];
+        const updated = await api.requestInfo(record.application_id, {
+          requested_items: items,
+          reviewer: reviewer.trim(),
+        });
+        onSuccess(updated as DecisionRecord);
+      } else {
+        // approve or override — POST to /decision
+        const overrideReason = isOverride ? reason.trim() : undefined;
+        const updated = await api.recordDecision(record.application_id, {
+          human_decision:  decision,
+          human_reviewer:  reviewer.trim(),
+          override_reason: overrideReason,
+        });
+        onSuccess(updated as DecisionRecord);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed.");
     } finally {
@@ -114,13 +142,13 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
             className="p-1 text-[#8A8072] hover:text-[#12213A] focus:outline-none focus:ring-1 focus:ring-[#C48A2A] rounded"
             aria-label="Close dialog"
           >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 py-5 space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="px-5 py-5 space-y-4">
 
           {/* Reviewer ID */}
           <div>
@@ -136,7 +164,6 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
               placeholder="underwriter_1"
               className={inputCls}
               required
-              aria-required="true"
             />
           </div>
 
@@ -171,7 +198,7 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
           )}
 
           {/* Override reason */}
-          {isOverride && (
+          {isOverride && variant !== "request_info" && (
             <div>
               <label htmlFor="reason" className="block text-[10px] font-semibold text-[#8A8072] uppercase tracking-widest mb-1.5">
                 Override reason <span className="text-[#8C3B2E]">*</span>
@@ -184,55 +211,76 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
                 rows={3}
                 placeholder="Describe the business rationale for overriding the agent recommendation…"
                 className={`${inputCls} resize-none`}
-                aria-required="true"
-                aria-describedby="reason-hint"
               />
-              <p
-                id="reason-hint"
-                className={`text-[10px] mt-1 tabular-nums ${
-                  reason.trim().length < 20 && reason.length > 0 ? "text-[#8C3B2E]" : "text-[#8A8072]"
-                }`}
-              >
+              <p className={`text-[10px] mt-1 tabular-nums ${reason.trim().length < 20 && reason.length > 0 ? "text-[#8C3B2E]" : "text-[#8A8072]"}`}>
                 {reason.trim().length} / 20 minimum characters
               </p>
             </div>
           )}
 
           {/* Request-info checklist */}
-          {variant === "request_info" && checklistItems.length > 0 && (
-            <div>
-              <div className="text-[10px] font-semibold text-[#8A8072] uppercase tracking-widest mb-2">
-                Outstanding items
+          {variant === "request_info" && (
+            <div className="space-y-3">
+              <div className="text-[10px] font-semibold text-[#8A8072] uppercase tracking-widest">
+                Items to request from applicant
+                <span className="ml-1 normal-case text-[#8A8072]/70">(select all that apply)</span>
               </div>
-              <div className="space-y-2">
-                {checklistItems.map((item) => (
-                  <label key={item} className="flex items-center gap-2 text-sm cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={selectedDocs.includes(item)}
-                      onChange={() => toggleDoc(item)}
-                      className="accent-[#C48A2A] w-4 h-4"
-                    />
-                    <span className="group-hover:text-[#12213A] text-[#8A8072] transition-colors">
-                      {item.replace(/_/g, " ")}
-                    </span>
-                  </label>
-                ))}
+
+              {/* Known issues pre-populated */}
+              {knownItems.length > 0 && (
+                <div className="space-y-2">
+                  {knownItems.map((item) => (
+                    <label key={item} className="flex items-center gap-2 text-sm cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.includes(item)}
+                        onChange={() => toggleItem(item)}
+                        className="accent-[#C48A2A] w-4 h-4"
+                      />
+                      <span className="group-hover:text-[#12213A] text-[#8A8072] transition-colors">
+                        {item}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Custom item input */}
+              <div>
+                <label className="block text-[10px] text-[#8A8072] mb-1">Add custom request:</label>
+                <input
+                  type="text"
+                  value={customItem}
+                  onChange={(e) => setCustomItem(e.target.value)}
+                  placeholder="e.g. Updated bank statements for last 6 months"
+                  className={`${inputCls} text-xs`}
+                />
+              </div>
+
+              {knownItems.length === 0 && !customItem && (
+                <p className="text-xs text-[#8A8072]">
+                  No outstanding issues detected. Add a custom request above.
+                </p>
+              )}
+
+              <div className="text-xs text-[#8A8072] bg-[#FFFBEB] border border-[#FDE68A] rounded px-3 py-2">
+                <strong>Note:</strong> This will NOT finalise the decision. The application
+                status changes to "Awaiting Information" and remains open for review once
+                the applicant responds.
               </div>
             </div>
           )}
 
           {/* Audit notice */}
           <div className="text-xs text-[#8A8072] border-l-2 border-[#D6D0C4] pl-3 py-0.5">
-            This action will be permanently recorded in the audit trail.
+            {variant === "request_info"
+              ? "This action will be recorded in the audit trail. The application stays open."
+              : "This action will be permanently recorded in the audit trail."}
           </div>
 
           {/* Error */}
           {error && (
-            <div
-              className="text-sm text-[#8C3B2E] bg-[#8C3B2E]/5 border border-[#8C3B2E]/30 rounded px-3 py-2"
-              role="alert"
-            >
+            <div className="text-sm text-[#8C3B2E] bg-[#8C3B2E]/5 border border-[#8C3B2E]/30 rounded px-3 py-2" role="alert">
               {error}
             </div>
           )}
@@ -256,7 +304,11 @@ export default function DecisionModal({ record, variant, onClose, onSuccess }: P
                           ${accent.btn}
                           disabled:opacity-40 disabled:cursor-not-allowed`}
             >
-              {submitting ? "Submitting…" : "Confirm"}
+              {submitting
+                ? "Submitting…"
+                : variant === "request_info"
+                ? "Send Request"
+                : "Confirm"}
             </button>
           </div>
         </form>

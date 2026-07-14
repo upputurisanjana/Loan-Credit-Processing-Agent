@@ -29,7 +29,7 @@ export default function QueueTable({ items, loading }: Props) {
   const [sort, setSort]     = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [masked, setMasked] = useState(true);
-  const [filter, setFilter] = useState<"all" | "pending" | "fairness" | "challenger">("all");
+  const [filter, setFilter] = useState<"all" | "pending">("all");
 
   function toggleSort(key: SortKey) {
     if (sort === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -38,14 +38,16 @@ export default function QueueTable({ items, loading }: Props) {
 
   const sorted = [...items]
     .filter((i) => {
-      if (filter === "pending")    return i.status === "pending_human_review" || i.status === "flag_fairness_fail";
-      if (filter === "fairness")   return !i.fairness_match;
-      if (filter === "challenger") return i.challenger_disagreement;
+      if (filter === "pending") return (
+        i.status === "pending_human_review" ||
+        i.status === "flag_fairness_fail" ||
+        i.status === "awaiting_information"
+      );
       return true;
     })
     .sort((a, b) => {
       let cmp = 0;
-      if (sort === "composite_score") cmp = a.composite_score - b.composite_score;
+      if (sort === "composite_score") cmp = (a.composite_score ?? -1) - (b.composite_score ?? -1);
       else if (sort === "status")     cmp = a.status.localeCompare(b.status);
       else                            cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       return sortDir === "asc" ? cmp : -cmp;
@@ -80,10 +82,8 @@ export default function QueueTable({ items, loading }: Props) {
       {/* ── Filter bar ───────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {([
-          ["all",         "All"],
-          ["pending",     "⏳ Pending"],
-          ["fairness",    "⚠ Fairness"],
-          ["challenger",  "⚖ Challenger"],
+          ["all",     "All"],
+          ["pending", "⏳ Pending"],
         ] as const).map(([f, label]) => (
           <button
             key={f}
@@ -153,7 +153,6 @@ export default function QueueTable({ items, loading }: Props) {
                 Status <SortIndicator col="status" />
               </th>
               <th className={`${thCls} cursor-default`}>Age</th>
-              <th className={`${thCls} cursor-default`}>Flags</th>
             </tr>
           </thead>
           <tbody>
@@ -178,25 +177,29 @@ export default function QueueTable({ items, loading }: Props) {
 
                   {/* Score */}
                   <td className={tdCls}>
-                    <div className="flex items-center gap-2" data-numeric>
-                      <div className="w-20 h-1.5 bg-[#D6D0C4] rounded-full overflow-hidden flex-shrink-0">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${Math.round(item.composite_score * 100)}%`,
-                            background: item.band === "approve" ? "#3A6B4C" : item.band === "refer" ? "#C48A2A" : "#8C3B2E",
-                          }}
-                        />
+                    {item.composite_score != null ? (
+                      <div className="flex items-center gap-2" data-numeric>
+                        <div className="w-20 h-1.5 bg-[#D6D0C4] rounded-full overflow-hidden flex-shrink-0">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.round(item.composite_score * 100)}%`,
+                              background: item.band === "approve" ? "#3A6B4C" : item.band === "refer" ? "#C48A2A" : "#8C3B2E",
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-semibold tabular-nums text-[#12213A]">
+                          {Math.round(item.composite_score * 100)}
+                        </span>
                       </div>
-                      <span className="text-sm font-semibold tabular-nums text-[#12213A]">
-                        {Math.round(item.composite_score * 100)}
-                      </span>
-                    </div>
+                    ) : (
+                      <span className="text-xs text-[#8A8072]">—</span>
+                    )}
                   </td>
 
                   {/* Band */}
                   <td className={tdCls}>
-                    <StatusPill value={item.band} size="sm" />
+                    {item.band ? <StatusPill value={item.band} size="sm" /> : <span className="text-xs text-[#8A8072]">—</span>}
                   </td>
 
                   {/* Status */}
@@ -207,31 +210,6 @@ export default function QueueTable({ items, loading }: Props) {
                   {/* Age */}
                   <td className={`${tdCls} text-xs text-[#8A8072] tabular-nums`}>
                     {formatAge(item.created_at)}
-                  </td>
-
-                  {/* Flags */}
-                  <td className={`${tdCls} text-xs`}>
-                    <div className="flex items-center gap-1.5">
-                      {!item.fairness_match && (
-                        <span
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#8C3B2E]/10 text-[#8C3B2E] border border-[#8C3B2E]/20"
-                          title="Fairness mismatch"
-                        >
-                          ⚠ F
-                        </span>
-                      )}
-                      {item.challenger_disagreement && (
-                        <span
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[#C48A2A]/10 text-[#C48A2A] border border-[#C48A2A]/20"
-                          title="Challenger model disagrees"
-                        >
-                          ⚖ C
-                        </span>
-                      )}
-                      {item.fairness_match && !item.challenger_disagreement && (
-                        <span className="text-[#3A6B4C]/50 text-[10px]">–</span>
-                      )}
-                    </div>
                   </td>
                 </tr>
               );
