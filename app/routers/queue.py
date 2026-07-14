@@ -38,7 +38,7 @@ async def list_queue() -> list[dict]:
             items.append({
                 "application_id":         record.application_id,
                 "agent_recommendation":   record.agent_recommendation,
-                "status":                 "decided" if record.human_decision else "pending_human_review",
+                "status":                 record.status,
                 "created_at":             record.created_at.isoformat(),
                 "composite_score":        sb.composite_score,
                 "band":                   sb.band,
@@ -48,14 +48,14 @@ async def list_queue() -> list[dict]:
                 "human_decision":         record.human_decision,
             })
         else:
-            # Hold / error state — surfaced in queue with minimal data
+            # Hold / error state — surfaced in queue with null scores
             items.append({
                 "application_id":         record.get("application_id", "unknown"),
                 "agent_recommendation":   None,
                 "status":                 record.get("status", "error"),
                 "created_at":             record.get("submitted_at", datetime.now(timezone.utc).isoformat()),
-                "composite_score":        0.0,
-                "band":                   "refer",
+                "composite_score":        None,
+                "band":                   None,
                 "policy_version":         "-",
                 "fairness_match":         True,
                 "challenger_disagreement": False,

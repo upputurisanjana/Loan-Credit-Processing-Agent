@@ -11,6 +11,7 @@ GET /applications/{application_id}
     Retrieve the stored decision record for an application.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -19,8 +20,10 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.models.application import ApplicationRaw
 from app.models.decision import DecisionRecord
+from app.models.scoring import ScoreBreakdown
+from app.models.fairness import FairnessCheck, ChallengerResult
 from app.agent.graph import run_pipeline
-from app.db.database import get_db, insert_decision
+from app.db.database import get_db, insert_decision, fetch_all_decisions
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +32,86 @@ router = APIRouter(prefix="/applications", tags=["intake"])
 # ---------------------------------------------------------------------------
 # In-memory store — write-through cache backed by SQLite (app/db/).
 # All writes go to DB first; _store is populated on insert for fast reads.
+# On startup the store is rehydrated from the DB so the queue is never empty
+# after a server restart.
 # ---------------------------------------------------------------------------
 _store: dict[str, Any] = {}  # application_id → DecisionRecord | dict
+
+
+def _row_to_decision_record(row) -> DecisionRecord:
+    """Reconstruct a DecisionRecord from a decision_records DB row."""
+    sb_raw = json.loads(row["score_breakdown_json"])
+    score_breakdown = ScoreBreakdown(**sb_raw)
+
+    fairness_check = FairnessCheck(
+        original_band=row["fairness_original_band"],
+        masked_band=row["fairness_masked_band"],
+        original_composite=row["fairness_original_composite"],
+        masked_composite=row["fairness_masked_composite"],
+        match=bool(row["fairness_match"]),
+    )
+
+    created_at = row["created_at"]
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+
+    decided_at = row["decided_at"]
+    if isinstance(decided_at, str) and decided_at:
+        decided_at = datetime.fromisoformat(decided_at)
+    else:
+        decided_at = None
+
+    # awaiting_info_items stored as JSON list; older rows may not have it
+    awaiting_raw = row["awaiting_info_items"] if "awaiting_info_items" in row.keys() else "[]"
+    try:
+        awaiting_items = json.loads(awaiting_raw or "[]")
+    except Exception:
+        awaiting_items = []
+
+    return DecisionRecord(
+        application_id=row["application_id"],
+        policy_version=row["policy_version"],
+        applicant_name=row["applicant_name"] if "applicant_name" in row.keys() else "",
+        applicant_address=row["applicant_address"] if "applicant_address" in row.keys() else "",
+        loan_amount_requested=row["loan_amount_requested"] if "loan_amount_requested" in row.keys() else 0.0,
+        applicant_notes=row["applicant_notes"] if "applicant_notes" in row.keys() else None,
+        score_breakdown=score_breakdown,
+        fairness_check=fairness_check,
+        challenger_result=None,  # not stored in DB
+        agent_recommendation=row["agent_recommendation"],
+        rationale=row["rationale"],
+        adverse_action_draft=row["adverse_action_draft"],
+        approved_notice_text=row["approved_notice_text"] if "approved_notice_text" in row.keys() else None,
+        human_decision=row["human_decision"],
+        human_reviewer=row["human_reviewer"],
+        override_reason=row["override_reason"],
+        decided_at=decided_at,
+        awaiting_info_items=awaiting_items,
+        created_at=created_at,
+    )
+
+
+def _load_store_from_db() -> None:
+    """Populate _store from the database on startup."""
+    try:
+        db = get_db()
+        rows = fetch_all_decisions(db)
+        for row in rows:
+            try:
+                record = _row_to_decision_record(row)
+                _store[record.application_id] = record
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "intake: failed to rehydrate app_id=%s from DB — %s",
+                    row["application_id"] if row else "?", exc,
+                )
+        log.info("intake: rehydrated %d application(s) from DB into memory store", len(_store))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("intake: could not load store from DB on startup — %s", exc)
+
+
+# Rehydrate on module load (happens when FastAPI starts)
+_load_store_from_db()
 
 
 @router.post(
