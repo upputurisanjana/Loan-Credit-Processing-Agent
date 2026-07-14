@@ -398,6 +398,11 @@ def run_pipeline(raw: ApplicationRaw) -> "DecisionRecord | dict":
     record = DecisionRecord(
         application_id=raw.application_id,
         policy_version=final_state["score_breakdown"].policy_version,
+        # Applicant details — captured at intake, surfaced to reviewers
+        applicant_name=raw.applicant_name,
+        applicant_address=raw.applicant_address,
+        loan_amount_requested=raw.loan_amount_requested,
+        applicant_notes=raw.applicant_notes,
         score_breakdown=final_state["score_breakdown"],
         fairness_check=final_state["fairness_check"],
         challenger_result=final_state.get("challenger_result"),
