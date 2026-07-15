@@ -80,10 +80,40 @@ app.include_router(documents_router)
 # ---------------------------------------------------------------------------
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
+    """
+    Returns API status, model config, and a live reachability probe for
+    both the primary and challenger LLM models.
+    """
+    from app.tools.github_models_client import call_model
+
+    def _probe_model(model_name: str) -> dict:
+        try:
+            call_model(
+                model=model_name,
+                messages=[{"role": "user", "content": "ping"}],
+                temperature=0.0,
+                max_tokens=1,
+            )
+            return {"status": "ok", "model": model_name}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "unavailable", "model": model_name, "error": str(exc)[:120]}
+
+    primary_probe    = _probe_model(settings.primary_model)
+    challenger_probe = _probe_model(settings.challenger_model)
+
+    overall = (
+        "ok"
+        if primary_probe["status"] == "ok"
+        else "degraded"
+    )
+    if challenger_probe["status"] != "ok":
+        overall = "degraded"
+
     return {
-        "status": "ok",
+        "status": overall,
         "version": settings.app_version,
-        "primary_model": settings.primary_model,
+        "primary_model":    primary_probe,
+        "challenger_model": challenger_probe,
         "policy_path": settings.policy_path,
     }
 
