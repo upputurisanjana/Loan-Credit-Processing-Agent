@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS decision_records (
     -- Request-more-information items (JSON list of strings)
     awaiting_info_items     TEXT    NOT NULL DEFAULT '[]',
 
+    -- Pipeline execution trace (JSON array, one entry per graph node)
+    pipeline_trace          TEXT    NOT NULL DEFAULT '[]',
+
     -- Metadata
     created_at              TEXT    NOT NULL,   -- ISO-8601, set at insert
     immutable               INTEGER NOT NULL DEFAULT 1

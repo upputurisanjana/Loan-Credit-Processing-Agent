@@ -67,6 +67,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         while timestamps and timestamps[0] < window_start:
             timestamps.popleft()
 
+        # Prune the IP entry entirely if it has no recent requests,
+        # preventing unbounded growth of _request_log under many unique IPs.
+        if not timestamps and client_ip in _request_log:
+            del _request_log[client_ip]
+            timestamps = _request_log[client_ip]  # defaultdict re-creates on access
+
         if len(timestamps) >= _RATE_LIMIT_REQUESTS:
             oldest = timestamps[0]
             retry_after = int(_RATE_LIMIT_WINDOW - (now - oldest)) + 1

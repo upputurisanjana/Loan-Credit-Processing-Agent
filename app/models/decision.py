@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.scoring import ScoreBreakdown
 from app.models.fairness import FairnessCheck, ChallengerResult
@@ -15,12 +15,14 @@ class DecisionRecord(BaseModel):
 
     Written once when the agent completes its pipeline and the application
     enters HUMAN_GATE state.  Human decisions (approve/override/etc.) are
-    recorded in the same row via the human_decision / override_reason fields
-    once the underwriter acts.
+    recorded by replacing the store entry with a new model_copy — the
+    original object is never mutated in-place.
 
     Records are append-only: corrections are made via DecisionAmendment
     linked to this record — the original row is never mutated.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     application_id: str
     policy_version: str

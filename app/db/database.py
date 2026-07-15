@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -37,33 +38,62 @@ log = logging.getLogger(__name__)
 _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 # ---------------------------------------------------------------------------
-# Connection factory
+# Connection cache — one connection per process, protected by a lock.
+# sqlite3 connections are not thread-safe by themselves; the lock serialises
+# all writes so concurrent FastAPI workers don't race on the same connection.
 # ---------------------------------------------------------------------------
+_db_connection: Optional[sqlite3.Connection] = None
+_db_lock = threading.Lock()
+
 
 def get_db(db_url: Optional[str] = None) -> sqlite3.Connection:
     """
-    Return a sqlite3 connection to the audit database.
+    Return the cached sqlite3 connection to the audit database.
+
+    Opens and initialises the connection on first call, then returns the
+    same object on every subsequent call (singleton per process).
+
+    All callers share one connection; the module-level _db_lock must be
+    held for any write operation — see insert_decision, record_human_decision
+    etc., which acquire the lock internally.
 
     The DATABASE_URL env var is expected to be in the form
     "sqlite:///./path/to/audit.db" (SQLAlchemy convention) or just a
     plain file path.  Defaults to ./audit.db if not set.
     """
-    raw_url = db_url or os.environ.get("DATABASE_URL", "sqlite:///./audit.db")
+    global _db_connection  # noqa: PLW0603
+    if _db_connection is not None:
+        return _db_connection
 
-    # Strip SQLAlchemy prefix if present
-    if raw_url.startswith("sqlite:///"):
-        path = raw_url[len("sqlite:///"):]
-    else:
-        path = raw_url
+    with _db_lock:
+        # Double-checked locking: another thread may have initialised while
+        # we waited for the lock.
+        if _db_connection is not None:
+            return _db_connection
 
-    # Ensure parent directory exists
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
+        raw_url = db_url or os.environ.get("DATABASE_URL", "sqlite:///./audit.db")
 
-    conn = sqlite3.connect(path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    _ensure_schema(conn)
-    _migrate_schema(conn)
-    return conn
+        # Strip SQLAlchemy prefix if present
+        if raw_url.startswith("sqlite:///"):
+            path = raw_url[len("sqlite:///"):]
+        else:
+            path = raw_url
+
+        # Ensure parent directory exists
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        # WAL mode allows concurrent reads while a write is in progress,
+        # reducing lock contention under light multi-worker load.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        _ensure_schema(conn)
+        _migrate_schema(conn)
+
+        _db_connection = conn
+        log.info("db: opened connection to %s (WAL mode)", path)
+        return _db_connection
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -86,6 +116,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         "ALTER TABLE decision_records ADD COLUMN applicant_notes TEXT",
         "ALTER TABLE decision_records ADD COLUMN approved_notice_text TEXT",
         "ALTER TABLE decision_records ADD COLUMN awaiting_info_items TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE decision_records ADD COLUMN pipeline_trace TEXT NOT NULL DEFAULT '[]'",
     ]
     for sql in migrations:
         try:
@@ -131,6 +162,7 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
             override_reason,
             decided_at,
             awaiting_info_items,
+            pipeline_trace,
             created_at,
             immutable
         ) VALUES (
@@ -155,6 +187,7 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
             :override_reason,
             :decided_at,
             :awaiting_info_items,
+            :pipeline_trace,
             :created_at,
             1
         )
@@ -181,11 +214,13 @@ def insert_decision(conn: sqlite3.Connection, record: DecisionRecord) -> None:
         "override_reason": record.override_reason,
         "decided_at": record.decided_at.isoformat() if record.decided_at else None,
         "awaiting_info_items": json.dumps(record.awaiting_info_items),
+        "pipeline_trace": json.dumps(record.pipeline_trace),
         "created_at": record.created_at.isoformat(),
     }
     try:
-        conn.execute(sql, params)
-        conn.commit()
+        with _db_lock:
+            conn.execute(sql, params)
+            conn.commit()
         log.info("db: inserted decision_record app_id=%s", record.application_id)
     except sqlite3.IntegrityError as exc:
         raise ValueError(
@@ -218,14 +253,15 @@ def record_human_decision(
         WHERE application_id = :application_id
           AND human_decision IS NULL
     """
-    cursor = conn.execute(sql, {
-        "application_id": application_id,
-        "human_decision": human_decision,
-        "human_reviewer": human_reviewer,
-        "override_reason": override_reason,
-        "decided_at": datetime.now(timezone.utc).isoformat(),
-    })
-    conn.commit()
+    with _db_lock:
+        cursor = conn.execute(sql, {
+            "application_id": application_id,
+            "human_decision": human_decision,
+            "human_reviewer": human_reviewer,
+            "override_reason": override_reason,
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        })
+        conn.commit()
 
     if cursor.rowcount == 0:
         raise ValueError(
@@ -252,11 +288,12 @@ def update_approved_notice(
         SET approved_notice_text = :notice_text
         WHERE application_id = :application_id
     """
-    cursor = conn.execute(sql, {
-        "application_id": application_id,
-        "notice_text": approved_notice_text,
-    })
-    conn.commit()
+    with _db_lock:
+        cursor = conn.execute(sql, {
+            "application_id": application_id,
+            "notice_text": approved_notice_text,
+        })
+        conn.commit()
     if cursor.rowcount == 0:
         raise ValueError(f"Application {application_id!r} not found.")
     log.info("db: approved_notice_text updated for app_id=%s", application_id)
@@ -278,11 +315,12 @@ def update_awaiting_info(
         WHERE application_id = :application_id
           AND human_decision IS NULL
     """
-    cursor = conn.execute(sql, {
-        "application_id": application_id,
-        "items_json": json.dumps(items),
-    })
-    conn.commit()
+    with _db_lock:
+        cursor = conn.execute(sql, {
+            "application_id": application_id,
+            "items_json": json.dumps(items),
+        })
+        conn.commit()
     if cursor.rowcount == 0:
         raise ValueError(
             f"Cannot update awaiting_info for {application_id!r}: "
@@ -313,15 +351,16 @@ def insert_amendment(conn: sqlite3.Connection, amendment: DecisionAmendment) -> 
             :amended_at
         )
     """
-    conn.execute(sql, {
-        "amendment_id": amendment.amendment_id,
-        "original_application_id": amendment.original_application_id,
-        "amended_by": amendment.amended_by,
-        "amendment_reason": amendment.amendment_reason,
-        "field_changes_json": json.dumps(amendment.field_changes),
-        "amended_at": amendment.amended_at.isoformat(),
-    })
-    conn.commit()
+    with _db_lock:
+        conn.execute(sql, {
+            "amendment_id": amendment.amendment_id,
+            "original_application_id": amendment.original_application_id,
+            "amended_by": amendment.amended_by,
+            "amendment_reason": amendment.amendment_reason,
+            "field_changes_json": json.dumps(amendment.field_changes),
+            "amended_at": amendment.amended_at.isoformat(),
+        })
+        conn.commit()
     log.info(
         "db: inserted amendment amendment_id=%s original_app_id=%s",
         amendment.amendment_id, amendment.original_application_id,
