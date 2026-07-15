@@ -1,11 +1,14 @@
 /**
  * api/client.ts — typed fetch wrapper for the FastAPI backend.
- * All types mirror the Pydantic models in app/models/.
+ *
+ * Two surfaces:
+ *   applicantApi — what the applicant-facing portal needs (submit + status)
+ *   api          — full internal API (kept for future admin/reviewer use)
  */
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
-// ── Types ────────────────────────────────────────────────────────────────
+// ── Shared types ─────────────────────────────────────────────────────────
 
 export type Band = "approve" | "refer" | "decline";
 export type AppStatus =
@@ -15,6 +18,39 @@ export type AppStatus =
   | "hold_for_document"
   | "flag_fairness_fail"
   | "error";
+
+// ── Applicant-facing types ────────────────────────────────────────────────
+
+export interface DocumentInput {
+  doc_type: "id" | "pay_stub" | "bank_statement" | "other";
+  file_path: string;
+  ocr_confidence?: number;
+  extracted_text?: string;
+}
+
+export interface SubmitApplicationRequest {
+  application_id: string;
+  applicant_name: string;
+  applicant_address: string;
+  stated_income: number;
+  stated_monthly_debt: number;
+  loan_amount_requested: number;
+  applicant_notes: string | null;
+  documents: DocumentInput[];
+}
+
+/** Minimal view returned to the applicant — no internal scores exposed */
+export interface ApplicantStatusView {
+  application_id: string;
+  status: AppStatus;
+  submitted_at: string;
+  human_decision: Band | null;
+  awaiting_info_items: string[];
+  missing_docs: string[];
+  approved_notice_text: string | null;
+}
+
+// ── Internal types (kept for admin/reviewer future use) ───────────────────
 
 export interface ClauseCitation {
   clause_id: string;
@@ -34,86 +70,28 @@ export interface ScoreBreakdown {
   clause_citations: ClauseCitation[];
 }
 
-export interface FairnessCheck {
-  original_band: string;
-  masked_band: string;
-  original_composite: number;
-  masked_composite: number;
-  match: boolean;
-}
-
-export interface ChallengerResult {
-  primary_band: string;
-  challenger_band: string;
-  bands_agree: boolean;
-  delta: number;
-}
-
 export interface DecisionRecord {
   application_id: string;
   policy_version: string;
-  // Applicant details
   applicant_name: string;
   applicant_address: string;
   loan_amount_requested: number;
   applicant_notes: string | null;
-  // Pipeline outputs
   score_breakdown: ScoreBreakdown;
-  fairness_check: FairnessCheck;
-  challenger_result: ChallengerResult | null;
   agent_recommendation: Band;
   rationale: string;
   adverse_action_draft: string | null;
   approved_notice_text: string | null;
-  // Human gate
   human_decision: Band | null;
   human_reviewer: string | null;
   override_reason: string | null;
   decided_at: string | null;
-  // Request-info state
   awaiting_info_items: string[];
   created_at: string;
   immutable: boolean;
   status: AppStatus;
-  // hold state fields
   missing_docs?: string[];
   consistency_flags?: string[];
-  pipeline_trace?: TraceEntry[];
-}
-
-export interface TraceEntry {
-  node: string;
-  timestamp: string;
-  [key: string]: unknown;
-}
-
-export interface QueueItem {
-  application_id: string;
-  agent_recommendation: Band | null;
-  status: AppStatus;
-  created_at: string;
-  composite_score: number | null;
-  band: Band | null;
-  policy_version: string;
-  fairness_match: boolean;
-  challenger_disagreement: boolean;
-  human_decision: Band | null;
-}
-
-export interface HumanDecisionRequest {
-  human_decision: Band;
-  human_reviewer: string;
-  override_reason?: string;
-}
-
-export interface RequestInfoRequest {
-  requested_items: string[];
-  reviewer: string;
-}
-
-export interface NoticeUpdateRequest {
-  notice_text: string;
-  reviewer: string;
 }
 
 export interface DocumentMeta {
@@ -135,11 +113,6 @@ export interface UploadResponse {
   all_documents: DocumentMeta[];
 }
 
-export interface DocumentsResponse {
-  application_id: string;
-  documents: DocumentMeta[];
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -154,61 +127,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ── API calls ─────────────────────────────────────────────────────────────
+// ── Applicant API ─────────────────────────────────────────────────────────
 
-export const api = {
-  /** GET /queue — all applications in the pending queue */
-  getQueue: () => request<QueueItem[]>("/queue"),
-
-  /** GET /applications/:id — full decision record */
-  getApplication: (id: string) =>
-    request<DecisionRecord>(`/applications/${id}`),
-
-  /** POST /applications/:id/decision — underwriter final decision */
-  recordDecision: (id: string, body: HumanDecisionRequest) =>
-    request<DecisionRecord>(`/applications/${id}/decision`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** POST /applications/:id/request-info — reviewer requests info without deciding */
-  requestInfo: (id: string, body: RequestInfoRequest) =>
-    request<DecisionRecord>(`/applications/${id}/request-info`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  /** PATCH /applications/:id/notice — save reviewer-edited notice text */
-  updateNotice: (id: string, body: NoticeUpdateRequest) =>
-    request<DecisionRecord>(`/applications/${id}/notice`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
-
-  /** GET /applications/:id/trace — audit node trace */
-  getTrace: (id: string) =>
-    request<{ application_id: string; trace: TraceEntry[] }>(
-      `/applications/${id}/trace`
-    ),
-
-  /** POST /applications/:id/documents — upload supporting documents */
+export const applicantApi = {
+  /** Upload documents before submitting — must be called first. */
   uploadDocuments: async (
-    id: string,
+    appId: string,
     files: File[],
-    docTypes?: string[],
+    docTypes: string[],
   ): Promise<UploadResponse> => {
     const form = new FormData();
-    for (const file of files) {
-      form.append("files", file);
-    }
-    // Pass doc_types as comma-separated string if provided
-    if (docTypes && docTypes.length > 0) {
-      form.append("doc_types", docTypes.join(","));
-    }
-    const res = await fetch(`${BASE}/applications/${id}/documents`, {
+    for (const file of files) form.append("files", file);
+    if (docTypes.length > 0) form.append("doc_types", docTypes.join(","));
+    const res = await fetch(`${BASE}/applications/${appId}/documents`, {
       method: "POST",
       body: form,
-      // Do NOT set Content-Type — browser sets it with boundary automatically
     });
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
@@ -217,21 +150,74 @@ export const api = {
     return res.json() as Promise<UploadResponse>;
   },
 
-  /** GET /applications/:id/documents — list uploaded documents */
-  listDocuments: (id: string) =>
-    request<DocumentsResponse>(`/applications/${id}/documents`),
-
-  /** PATCH /applications/:id/documents/:filename/verify — reviewer verifies a doc */
-  verifyDocument: (
-    id: string,
-    filename: string,
-    body: { verification_status: "verified" | "rejected"; verified_by: string; verification_note?: string },
-  ) =>
-    request<DocumentMeta>(`/applications/${id}/documents/${encodeURIComponent(filename)}/verify`, {
-      method: "PATCH",
+  /** POST /applications — submit the application. */
+  submitApplication: (body: SubmitApplicationRequest): Promise<DecisionRecord> =>
+    request<DecisionRecord>("/applications", {
+      method: "POST",
       body: JSON.stringify(body),
     }),
 
-  /** GET /applications/:id/pdf — download PDF report */
+  /**
+   * GET /applications/:id — fetch current status.
+   * Returns only applicant-safe fields — no scores, no rationale.
+   */
+  getStatus: async (appId: string): Promise<ApplicantStatusView> => {
+    const full = await request<DecisionRecord>(`/applications/${appId}`);
+    return {
+      application_id:       full.application_id,
+      status:               full.status,
+      submitted_at:         full.created_at,
+      human_decision:       full.human_decision,
+      awaiting_info_items:  full.awaiting_info_items ?? [],
+      missing_docs:         full.missing_docs ?? [],
+      approved_notice_text: full.approved_notice_text ?? null,
+    };
+  },
+};
+
+// ── Full internal API (future reviewer / admin portal) ────────────────────
+
+export interface QueueItem {
+  application_id: string;
+  applicant_name: string;
+  loan_amount_requested: number;
+  agent_recommendation: Band | null;
+  status: AppStatus;
+  created_at: string;
+  composite_score: number | null;
+  band: Band | null;
+  policy_version: string;
+  human_decision: Band | null;
+  human_reviewer: string | null;
+}
+
+export const api = {
+  getQueue: () => request<QueueItem[]>("/queue"),
+  getApplication: (id: string) =>
+    request<DecisionRecord>(`/applications/${id}`),
+  recordDecision: (
+    id: string,
+    body: { human_decision: Band; human_reviewer: string; override_reason?: string },
+  ) =>
+    request<DecisionRecord>(`/applications/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  requestInfo: (
+    id: string,
+    body: { requested_items: string[]; reviewer: string },
+  ) =>
+    request<DecisionRecord>(`/applications/${id}/request-info`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateNotice: (
+    id: string,
+    body: { notice_text: string; reviewer: string },
+  ) =>
+    request<DecisionRecord>(`/applications/${id}/notice`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   getPdfUrl: (id: string) => `${BASE}/applications/${id}/pdf`,
 };
