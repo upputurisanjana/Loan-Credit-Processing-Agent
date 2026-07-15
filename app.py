@@ -13,6 +13,8 @@ Backend must be running at http://localhost:8000
 # Imports
 # ─────────────────────────────────────────────────────────────────────────────
 import json
+import random
+import string
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,8 +25,8 @@ import streamlit as st
 # Page config  (MUST be first Streamlit call)
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Credit Decisioning Agent",
-    page_icon="💎",
+    page_title="LoanApply — Submit Your Application",
+    page_icon="📝",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -455,7 +457,7 @@ def _counterfactual(sb: dict) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_sidebar() -> str:
-    """Render sidebar brand + nav; return the selected page key."""
+    """Render applicant-facing sidebar brand + nav; return the selected page key."""
     with st.sidebar:
         # Brand header
         st.markdown(
@@ -468,9 +470,9 @@ def render_sidebar() -> str:
     </div>
     <div>
       <div class="sidebar-brand" style="font-size:.875rem;font-weight:600;color:#FFFFFF;
-           line-height:1.2;letter-spacing:-.01em;">Credit Agent</div>
+           line-height:1.2;letter-spacing:-.01em;">LoanApply</div>
       <div style="font-size:.6rem;color:#475569;text-transform:uppercase;
-           letter-spacing:.1em;margin-top:2px;">Decisioning</div>
+           letter-spacing:.1em;margin-top:2px;">Applicant Portal</div>
     </div>
   </div>
 </div>
@@ -478,76 +480,39 @@ def render_sidebar() -> str:
             unsafe_allow_html=True,
         )
 
-        # Section label
         st.markdown(
             '<p style="padding:0 .75rem;margin:.5rem 0 .35rem;font-size:.6rem;'
             'font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:#334155;">'
-            "WORKSPACE</p>",
+            "MENU</p>",
             unsafe_allow_html=True,
         )
 
+        # Applicant-only pages
         pages = {
-            "📋  Case Queue":           "queue",
-            "📝  Submit Application":   "submit",
-            "🔍  Application Detail":   "detail",
-            "🕵️  Audit Trace":          "audit",
+            "📝  Apply for a Loan":        "submit",
         }
 
-        # Initialize session state
         if "page" not in st.session_state:
-            st.session_state.page = "queue"
+            st.session_state.page = "submit"
 
         for label, key in pages.items():
             active = st.session_state.page == key
-            btn_style = (
-                "background:#1D4ED8;color:#FFFFFF;"
-                if active
-                else "background:transparent;color:#94A3B8;"
-            )
-            if st.button(
-                label,
-                key=f"nav_{key}",
-                use_container_width=True,
-                help=None,
-            ):
+            if st.button(label, key=f"nav_{key}", use_container_width=True):
                 st.session_state.page = key
                 st.rerun()
 
-        # Footer
+        # Backend health
         st.markdown(
-            """
-<div style="position:fixed;bottom:0;left:0;width:14rem;
-     padding:.75rem 1.25rem;border-top:1px solid #1E293B;
-     background:#0F172A;">
-  <div style="display:flex;align-items:center;gap:6px;">
-    <div style="width:6px;height:6px;border-radius:50%;background:#22C55E;flex-shrink:0;"></div>
-    <span style="font-size:.65rem;color:#475569;">Human-gated pipeline</span>
-  </div>
-</div>
-""",
+            '<div style="margin-top:1rem;padding:0 .75rem;">'
+            '<div style="display:flex;align-items:center;gap:.375rem;">'
+            '<div style="width:6px;height:6px;border-radius:50%;background:#22C55E;flex-shrink:0;"></div>'
+            '<span style="font-size:.6875rem;color:#475569;">Secure &amp; encrypted</span>'
+            '</div></div>',
             unsafe_allow_html=True,
         )
 
-        # Backend health in sidebar
-        try:
-            h = api_health()
-            st.markdown(
-                f'<div style="margin-top:.5rem;padding:.5rem .75rem;">'
-                f'<div style="font-size:.65rem;color:#334155;">Model: <span style="color:#64748B;">{h.get("primary_model","—")}</span></div>'
-                f'<div style="font-size:.65rem;color:#334155;">Policy: <span style="color:#64748B;">{h.get("policy_path","—")}</span></div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            st.markdown(
-                '<div style="margin-top:.5rem;padding:.5rem .75rem;font-size:.65rem;color:#EF4444;">⚠ Backend offline</div>',
-                unsafe_allow_html=True,
-            )
+    return st.session_state.get("page", "submit")
 
-    return st.session_state.page
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE: Submit Application
 # ─────────────────────────────────────────────────────────────────────────────
@@ -585,19 +550,34 @@ def page_submit() -> None:
             unsafe_allow_html=True,
         )
 
+        # Auto-generate a unique application ID once per session (immutable to applicant)
+        if "draft_app_id" not in st.session_state:
+            import random, string
+            suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            st.session_state.draft_app_id = f"APP-{suffix}"
+
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;'
+            f'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:.5rem;margin-bottom:1rem;">'
+            f'<div style="font-size:.75rem;color:#1D4ED8;font-weight:600;text-transform:uppercase;'
+            f'letter-spacing:.07em;">Your Reference Number</div>'
+            f'<div style="font-size:1rem;font-weight:700;color:#1E3A8A;font-family:monospace;">'
+            f'{st.session_state.draft_app_id}</div>'
+            f'<div style="font-size:.7rem;color:#6B7280;margin-left:auto;">'
+            f'Save this — you will need it to check your status</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
         with st.form("submit_form", clear_on_submit=False):
             # ── Application identity ──────────────────────────────────
             st.markdown(
                 '<div class="card-header" style="border-radius:.5rem .5rem 0 0;">Your Details</div>',
                 unsafe_allow_html=True,
             )
-            col1, col2 = st.columns(2)
-            with col1:
-                app_id  = st.text_input("Application ID *", placeholder="APP-001", help="Unique identifier for your application")
-            with col2:
-                name    = st.text_input("Full Name *", placeholder="Jane Smith")
-            address     = st.text_input("Address *", placeholder="42 Maple Street, London, EC1A 1BB")
-            notes       = st.text_area("Additional Notes (optional)", placeholder="Any context the reviewer should know…", height=70)
+            name    = st.text_input("Full Name *", placeholder="Jane Smith")
+            address = st.text_input("Address *", placeholder="42 Maple Street, London, EC1A 1BB")
+            notes   = st.text_area("Additional Notes (optional)", placeholder="Any context the reviewer should know…", height=70)
 
             st.divider()
 
@@ -652,8 +632,6 @@ def page_submit() -> None:
         # ── Handle submission ─────────────────────────────────────────
         if submitted:
             errors = []
-            if not app_id.strip():
-                errors.append("Application ID is required.")
             if not name.strip():
                 errors.append("Full name is required.")
             if not address.strip():
@@ -679,7 +657,7 @@ def page_submit() -> None:
                     docs.append({"doc_type": "other", "file_path": other_file.name, "ocr_confidence": 0.90, "extracted_text": f"Uploaded file: {other_file.name}"})
 
                 payload = {
-                    "application_id":        app_id.strip(),
+                    "application_id":        st.session_state.get("draft_app_id", "APP-UNKNOWN"),
                     "submitted_at":          datetime.now(timezone.utc).isoformat(),
                     "applicant_name":        name.strip(),
                     "applicant_address":     address.strip(),
@@ -720,6 +698,9 @@ def page_submit() -> None:
                     else:
                         app_result_id = result.get("application_id", "")
                         st.session_state.last_submitted = app_result_id
+                        # Reset so next form submission gets a fresh reference number
+                        if "draft_app_id" in st.session_state:
+                            del st.session_state["draft_app_id"]
 
                         # Upload the actual files to the documents endpoint
                         files_to_upload = [f for f in [id_file, ps_file, bs_file, other_file] if f is not None]
@@ -2105,17 +2086,8 @@ def page_amendments() -> None:
 
 def main() -> None:
     page = render_sidebar()
-
-    if page == "queue":
-        page_queue()
-    elif page == "submit":
-        page_submit()
-    elif page == "detail":
-        page_detail()
-    elif page == "audit":
-        page_audit()
-    else:
-        page_queue()
+    # Applicant portal — only one page
+    page_submit()
 
 
 # Streamlit executes this module at top-level (not via __main__), so always call main().
