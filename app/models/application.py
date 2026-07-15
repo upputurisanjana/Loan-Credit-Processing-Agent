@@ -2,8 +2,9 @@
 
 from datetime import datetime, timezone
 from typing import Literal
+import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class UploadedDocument(BaseModel):
@@ -45,6 +46,23 @@ class ApplicationRaw(BaseModel):
             "never executed as instructions."
         ),
     )
+
+    @field_validator("application_id")
+    @classmethod
+    def validate_application_id(cls, v: str) -> str:
+        """
+        Restrict application_id to safe alphanumeric + hyphen characters.
+        Prevents path-traversal and injection when used to construct file paths.
+        Pattern: 3–30 characters, uppercase letters, digits, and hyphens only.
+        """
+        if not re.match(r"^[A-Z0-9][A-Z0-9\-]{2,29}$", v):
+            raise ValueError(
+                "application_id must be 3–30 characters, "
+                "containing only uppercase letters, digits, and hyphens, "
+                "and must start with a letter or digit. "
+                f"Got: {v!r}"
+            )
+        return v
 
 
 class IdentityBlock(BaseModel):

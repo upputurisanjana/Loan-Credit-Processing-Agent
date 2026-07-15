@@ -36,7 +36,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.decision import DecisionRecord
-from app.routers.intake import get_store
+from app.routers.intake import get_store, _public_payload
 from app.db.database import (
     get_db,
     record_human_decision as db_record_human_decision,
@@ -153,12 +153,16 @@ async def record_human_decision(
             ),
         )
 
-    record.human_decision = body.human_decision
-    record.human_reviewer = body.human_reviewer
-    record.override_reason = body.override_reason
-    record.decided_at = datetime.now(timezone.utc)
-    # Clear awaiting_info_items once a final decision is made
-    record.awaiting_info_items = []
+    # DecisionRecord is frozen — create a new instance with updated fields
+    # and replace the store entry. Never mutate the original object.
+    updated = record.model_copy(update={
+        "human_decision": body.human_decision,
+        "human_reviewer": body.human_reviewer,
+        "override_reason": body.override_reason,
+        "decided_at": datetime.now(timezone.utc),
+        "awaiting_info_items": [],
+    })
+    store[application_id] = updated
 
     try:
         db = get_db()
@@ -181,7 +185,7 @@ async def record_human_decision(
         is_override,
     )
 
-    return record.model_dump(mode="json")
+    return _public_payload(updated)
 
 
 @router.post(
@@ -224,7 +228,8 @@ async def request_more_info(
             detail=f"Application {application_id!r} is already decided.",
         )
 
-    record.awaiting_info_items = body.requested_items
+    updated = record.model_copy(update={"awaiting_info_items": body.requested_items})
+    store[application_id] = updated
 
     try:
         db = get_db()
@@ -237,7 +242,7 @@ async def request_more_info(
         application_id, body.reviewer, len(body.requested_items),
     )
 
-    return record.model_dump(mode="json")
+    return _public_payload(updated)
 
 
 @router.patch(
@@ -273,7 +278,8 @@ async def update_notice(
             detail=f"Application {application_id!r} is not in a valid state for notice editing.",
         )
 
-    record.approved_notice_text = body.notice_text
+    updated = record.model_copy(update={"approved_notice_text": body.notice_text})
+    store[application_id] = updated
 
     try:
         db = get_db()
@@ -286,4 +292,4 @@ async def update_notice(
         application_id, body.reviewer, len(body.notice_text),
     )
 
-    return record.model_dump(mode="json")
+    return _public_payload(updated)

@@ -41,12 +41,21 @@ class ChallengerResult(BaseModel):
 
     primary_band: str
     challenger_band: str
-    bands_agree: bool
+    bands_agree: bool = Field(
+        ...,
+        description=(
+            "True when the band difference is within the acceptable tolerance "
+            "(0 or 1 tier apart). False only when the gap is 2 tiers "
+            "(approve vs decline), which forces a REFER. "
+            "A 1-tier difference (approve vs refer, or refer vs decline) "
+            "is flagged in the UI but does NOT force REFER."
+        ),
+    )
     delta: float = Field(
         ...,
         description=(
             "Integer band distance between primary and challenger bands: "
-            "0 = same band, 1 = one tier apart (approve↔refer or refer↔decline), "
-            "2 = two tiers apart (approve↔decline). Stored as float for model compatibility."
+            "0 = same band, 1 = one tier apart (approve/refer or refer/decline), "
+            "2 = two tiers apart (approve/decline). Stored as float for model compatibility."
         ),
     )

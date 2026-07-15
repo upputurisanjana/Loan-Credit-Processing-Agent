@@ -68,6 +68,13 @@ def _row_to_decision_record(row) -> DecisionRecord:
     except Exception:
         awaiting_items = []
 
+    # pipeline_trace stored as JSON list; older rows may not have the column
+    trace_raw = row["pipeline_trace"] if "pipeline_trace" in row.keys() else "[]"
+    try:
+        pipeline_trace = json.loads(trace_raw or "[]")
+    except Exception:
+        pipeline_trace = []
+
     return DecisionRecord(
         application_id=row["application_id"],
         policy_version=row["policy_version"],
@@ -87,6 +94,7 @@ def _row_to_decision_record(row) -> DecisionRecord:
         override_reason=row["override_reason"],
         decided_at=decided_at,
         awaiting_info_items=awaiting_items,
+        pipeline_trace=pipeline_trace,
         created_at=created_at,
     )
 
@@ -149,21 +157,28 @@ async def submit_application(body: ApplicationRaw) -> dict:
     result = run_pipeline(body)
 
     if isinstance(result, DecisionRecord):
-        payload = result.model_dump(mode="json")
-        _store[app_id] = result
-        # Persist to DB (append-only)
+        # Persist to DB first — if this fails we must not serve a record
+        # that only exists in memory and will vanish on restart.
         try:
             db = get_db()
             insert_decision(db, result)
         except Exception as exc:  # noqa: BLE001
             log.error("intake: DB insert failed for app_id=%s — %s", app_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    f"Pipeline completed but the record could not be persisted "
+                    f"for application {app_id!r}. Please retry. ({exc})"
+                ),
+            )
+        _store[app_id] = result
         log.info(
             "intake: app_id=%s band=%s status=%s",
             app_id,
             result.agent_recommendation,
-            payload.get("status"),
+            result.status,
         )
-        return payload
+        return _public_payload(result)
 
     # Hold or error — also store so /decision endpoint can explain the state
     _store[app_id] = result
@@ -184,8 +199,30 @@ async def get_application(application_id: str) -> dict:
             detail=f"Application {application_id!r} not found.",
         )
     if isinstance(record, DecisionRecord):
-        return record.model_dump(mode="json")
+        return _public_payload(record)
     return record
+
+
+def _public_payload(record: DecisionRecord) -> dict:
+    """
+    Serialise a DecisionRecord for the public API response.
+
+    Strips internal pipeline diagnostics — fairness_check, challenger_result,
+    and pipeline_trace — from the JSON sent to the browser.
+
+    These three fields continue to:
+      - run fully in the pipeline (safety guarantees unchanged)
+      - be stored in the DB (audit trail intact)
+      - exist in the in-memory store (available for future admin endpoints)
+
+    They are excluded here because they are internal mechanics, not reviewer
+    or applicant information. Outcomes are already communicated via
+    agent_recommendation and rationale.
+    """
+    return record.model_dump(
+        mode="json",
+        exclude={"fairness_check", "challenger_result", "pipeline_trace"},
+    )
 
 
 def get_store() -> dict[str, Any]:

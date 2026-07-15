@@ -34,32 +34,32 @@ async def list_queue() -> list[dict]:
     for record in store.values():
         if isinstance(record, DecisionRecord):
             sb = record.score_breakdown
-            cr = record.challenger_result
             items.append({
-                "application_id":         record.application_id,
-                "agent_recommendation":   record.agent_recommendation,
-                "status":                 record.status,
-                "created_at":             record.created_at.isoformat(),
-                "composite_score":        sb.composite_score,
-                "band":                   sb.band,
-                "policy_version":         record.policy_version,
-                "fairness_match":         record.fairness_check.match,
-                "challenger_disagreement": (cr is not None and not cr.bands_agree),
-                "human_decision":         record.human_decision,
+                "application_id":       record.application_id,
+                "applicant_name":       record.applicant_name,
+                "loan_amount_requested": record.loan_amount_requested,
+                "agent_recommendation": record.agent_recommendation,
+                "status":               record.status,
+                "created_at":           record.created_at.isoformat(),
+                "composite_score":      sb.composite_score,
+                "band":                 sb.band,
+                "policy_version":       record.policy_version,
+                "human_decision":       record.human_decision,
+                "human_reviewer":       record.human_reviewer,
             })
         else:
-            # Hold / error state — surfaced in queue with null scores
             items.append({
-                "application_id":         record.get("application_id", "unknown"),
-                "agent_recommendation":   None,
-                "status":                 record.get("status", "error"),
-                "created_at":             record.get("submitted_at", datetime.now(timezone.utc).isoformat()),
-                "composite_score":        None,
-                "band":                   None,
-                "policy_version":         "-",
-                "fairness_match":         True,
-                "challenger_disagreement": False,
-                "human_decision":         None,
+                "application_id":       record.get("application_id", "unknown"),
+                "applicant_name":       record.get("applicant_name", ""),
+                "loan_amount_requested": record.get("loan_amount_requested", 0),
+                "agent_recommendation": None,
+                "status":               record.get("status", "error"),
+                "created_at":           record.get("submitted_at", datetime.now(timezone.utc).isoformat()),
+                "composite_score":      None,
+                "band":                 None,
+                "policy_version":       "-",
+                "human_decision":       None,
+                "human_reviewer":       None,
             })
 
     # Sort oldest-first; REFER-first sort is handled client-side
