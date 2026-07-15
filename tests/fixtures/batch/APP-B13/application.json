@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B13",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Gary Wilkins",
+  "applicant_address": "101 Poplar Street, Coventry, CV1 1AA",
+  "stated_income": 2200.0,
+  "stated_monthly_debt": 1760.0,
+  "loan_amount_requested": 18000.0,
+  "applicant_notes": "Recent job change.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B13/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Gary Wilkins\nDate of Birth: 1985-07-14\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B13/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Gary Wilkins\nEmployer: Temp Agency Work\nMonthly Gross Income: 2200.00\nEmployment Start: 2025-10-01\nMonths in Current Role: 9"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B13/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Gary Wilkins\nStatement Period: April-June 2026\nMonthly Income Credits: 1496.00\nRegular Debt Payments: 1760.00\nCredit History: 4.0 years\nCredit Flags: late_payment_12m"
+    }
+  ]
+}

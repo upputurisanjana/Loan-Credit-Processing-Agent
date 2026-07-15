@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B11",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Emily Watson",
+  "applicant_address": "18 Sycamore Street, Norwich, NR1 3CD",
+  "stated_income": 4000.0,
+  "stated_monthly_debt": 1320.0,
+  "loan_amount_requested": 12000.0,
+  "applicant_notes": "Missed a payment during redundancy, since resolved.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B11/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Emily Watson\nDate of Birth: 1989-05-03\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B11/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Emily Watson\nEmployer: Anglian Water\nMonthly Gross Income: 4000.00\nEmployment Start: 2021-02-01\nMonths in Current Role: 65"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B11/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Emily Watson\nStatement Period: April-June 2026\nMonthly Income Credits: 2720.00\nRegular Debt Payments: 1320.00\nCredit History: 5.5 years\nCredit Flags: late_payment_12m"
+    }
+  ]
+}

@@ -92,14 +92,14 @@ class TestBandGuard:
     def test_returns_empty_for_approve(self, approve_breakdown):
         """No LLM call should be made; returns empty string."""
         with patch("app.agent.nodes.draft_notice.call_model") as mock_llm:
-            result = run_draft_notice(approve_breakdown, "TEST-APPROVE")
+            result = run_draft_notice(approve_breakdown, "TEST-APPROVE", agent_recommendation="approve")
         assert result == ""
         mock_llm.assert_not_called()
 
     def test_returns_empty_for_refer(self, refer_breakdown):
         """No LLM call should be made; returns empty string."""
         with patch("app.agent.nodes.draft_notice.call_model") as mock_llm:
-            result = run_draft_notice(refer_breakdown, "TEST-REFER")
+            result = run_draft_notice(refer_breakdown, "TEST-REFER", agent_recommendation="refer")
         assert result == ""
         mock_llm.assert_not_called()
 
@@ -115,13 +115,13 @@ class TestSuccessPath:
             "app.agent.nodes.draft_notice.call_model",
             return_value=f"  {fake_draft}  ",
         ):
-            result = run_draft_notice(decline_breakdown, "TEST-DECLINE")
+            result = run_draft_notice(decline_breakdown, "TEST-DECLINE", agent_recommendation="decline")
         assert result == fake_draft
 
     def test_llm_called_with_decline_band_context(self, decline_breakdown):
         """The score breakdown data is included in the LLM messages."""
         with patch("app.agent.nodes.draft_notice.call_model", return_value="Draft text.") as mock_llm:
-            run_draft_notice(decline_breakdown, "TEST-DECLINE")
+            run_draft_notice(decline_breakdown, "TEST-DECLINE", agent_recommendation="decline")
 
         assert mock_llm.called
         call_args = mock_llm.call_args
@@ -142,7 +142,7 @@ class TestFallbackPath:
             "app.agent.nodes.draft_notice.call_model",
             side_effect=RuntimeError("LLM unavailable"),
         ):
-            result = run_draft_notice(decline_breakdown, "TEST-DECLINE")
+            result = run_draft_notice(decline_breakdown, "TEST-DECLINE", agent_recommendation="decline")
         assert result == _FALLBACK_DRAFT
         assert len(result) > 0
 
@@ -152,7 +152,7 @@ class TestFallbackPath:
             "app.agent.nodes.draft_notice.call_model",
             return_value="",
         ):
-            result = run_draft_notice(decline_breakdown, "TEST-DECLINE")
+            result = run_draft_notice(decline_breakdown, "TEST-DECLINE", agent_recommendation="decline")
         assert result == _FALLBACK_DRAFT
 
     def test_llm_whitespace_only_returns_fallback(self, decline_breakdown):
@@ -160,7 +160,7 @@ class TestFallbackPath:
             "app.agent.nodes.draft_notice.call_model",
             return_value="   \n  ",
         ):
-            result = run_draft_notice(decline_breakdown, "TEST-DECLINE")
+            result = run_draft_notice(decline_breakdown, "TEST-DECLINE", agent_recommendation="decline")
         assert result == _FALLBACK_DRAFT
 
 
@@ -180,7 +180,9 @@ class TestFallbackDraftContent:
         assert "reconsider" in text or "appeal" in text or "documentation" in text
 
     def test_fallback_contains_lender_contact_placeholder(self):
-        assert "[LENDER CONTACT" in _FALLBACK_DRAFT
+        # The fallback now uses the actual default lender contact string
+        # rather than a bracket placeholder.
+        assert "contact" in _FALLBACK_DRAFT.lower()
 
     def test_fallback_is_not_empty(self):
         assert len(_FALLBACK_DRAFT.strip()) > 50

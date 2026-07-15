@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B20",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Karen Blackwood",
+  "applicant_address": "19 Magnolia Drive, Plymouth, PL1 3RS",
+  "stated_income": 2600.0,
+  "stated_monthly_debt": 1430.0,
+  "loan_amount_requested": 9000.0,
+  "applicant_notes": "Card payments were missed while changing jobs.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B20/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Karen Blackwood\nDate of Birth: 1991-08-08\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B20/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Karen Blackwood\nEmployer: Plymouth Retail Group\nMonthly Gross Income: 2600.00\nEmployment Start: 2025-07-01\nMonths in Current Role: 12"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B20/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Karen Blackwood\nStatement Period: April-June 2026\nMonthly Income Credits: 1768.00\nRegular Debt Payments: 1430.00\nCredit History: 2.5 years\nCredit Flags: late_payment_12m"
+    }
+  ]
+}

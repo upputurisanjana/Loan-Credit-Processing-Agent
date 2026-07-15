@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B15",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Craig Foster",
+  "applicant_address": "29 Beech Road, Stoke-on-Trent, ST1 5GH",
+  "stated_income": 2800.0,
+  "stated_monthly_debt": 1596.0,
+  "loan_amount_requested": 12000.0,
+  "applicant_notes": "Financial difficulties resolved.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B15/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "DRIVING LICENCE\nName: Craig Foster\nDate of Birth: 1980-11-17\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B15/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Craig Foster\nEmployer: Staffordshire Deliveries\nMonthly Gross Income: 2800.00\nEmployment Start: 2023-01-01\nMonths in Current Role: 42"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B15/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Craig Foster\nStatement Period: April-June 2026\nMonthly Income Credits: 1904.00\nRegular Debt Payments: 1596.00\nCredit History: 3.5 years\nCredit Flags: default_36m"
+    }
+  ]
+}

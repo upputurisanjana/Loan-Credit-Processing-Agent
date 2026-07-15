@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B14",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Sophie Turner",
+  "applicant_address": "44 Rose Lane, Brighton, BN1 1TT",
+  "stated_income": 2000.0,
+  "stated_monthly_debt": 400.0,
+  "loan_amount_requested": 7000.0,
+  "applicant_notes": "First time borrower.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B14/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Sophie Turner\nDate of Birth: 2000-03-09\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B14/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Sophie Turner\nEmployer: Retail Co Ltd\nMonthly Gross Income: 2000.00\nEmployment Start: 2024-09-01\nMonths in Current Role: 10"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B14/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Sophie Turner\nStatement Period: April-June 2026\nMonthly Income Credits: 1360.00\nRegular Debt Payments: 400.00\nCredit History: 0.5 years\nCredit Flags: no_history"
+    }
+  ]
+}

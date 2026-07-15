@@ -1,0 +1,30 @@
+{
+  "application_id": "APP-B16",
+  "submitted_at": "2026-07-15T09:00:00Z",
+  "applicant_name": "Chloe Evans",
+  "applicant_address": "12 Foxglove Court, Leicester, LE1 4WX",
+  "stated_income": 1800.0,
+  "stated_monthly_debt": 360.0,
+  "loan_amount_requested": 5000.0,
+  "applicant_notes": "Student transitioning to work.",
+  "documents": [
+    {
+      "doc_type": "id",
+      "file_path": "uploads/APP-B16/id.pdf",
+      "ocr_confidence": 0.97,
+      "extracted_text": "PASSPORT\nName: Chloe Evans\nDate of Birth: 1999-06-30\nNationality: British"
+    },
+    {
+      "doc_type": "pay_stub",
+      "file_path": "uploads/APP-B16/pay_stub.pdf",
+      "ocr_confidence": 0.96,
+      "extracted_text": "PAYSLIP - June 2026\nEmployee: Chloe Evans\nEmployer: Leicester Cafes Ltd\nMonthly Gross Income: 1800.00\nEmployment Start: 2026-03-01\nMonths in Current Role: 4"
+    },
+    {
+      "doc_type": "bank_statement",
+      "file_path": "uploads/APP-B16/bank_statement.pdf",
+      "ocr_confidence": 0.95,
+      "extracted_text": "Account Holder: Chloe Evans\nStatement Period: April-June 2026\nMonthly Income Credits: 1224.00\nRegular Debt Payments: 360.00\nCredit History: 1.0 years\nCredit Flags: no_history"
+    }
+  ]
+}
