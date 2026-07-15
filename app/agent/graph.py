@@ -209,9 +209,19 @@ def node_flag_fairness_fail(state: AgentState) -> AgentState:
 
 
 def node_recommend(state: AgentState) -> AgentState:
-    fields: ApplicationFields = state["fields"]
-    breakdown: ScoreBreakdown = state["score_breakdown"]
-    fairness: FairnessCheck = state["fairness_check"]
+    fields: ApplicationFields = state.get("fields")
+    breakdown: ScoreBreakdown = state.get("score_breakdown")
+    fairness: FairnessCheck = state.get("fairness_check")
+
+    if fields is None or breakdown is None or fairness is None:
+        log.error(
+            "node=RECOMMEND missing required state keys — fields=%s breakdown=%s fairness=%s",
+            fields is not None, breakdown is not None, fairness is not None,
+        )
+        state["status"] = "error"
+        state["error_message"] = "RECOMMEND node reached with incomplete state (missing fields/breakdown/fairness)"
+        return state
+
     log.info("node=RECOMMEND app=%s", fields.application_id)
     recommendation, rationale = run_recommend(breakdown, fairness, fields.application_id)
 
@@ -240,6 +250,8 @@ def node_draft_notice(state: AgentState) -> AgentState:
     """
     Generate an adverse-action notice draft for DECLINE recommendations.
     Only runs when agent_recommendation == "decline".
+    Uses agent_recommendation (not breakdown.band) as the single source of
+    truth — these can differ when challenger or fairness overrides the band.
     The draft is stored in the state and later written to DecisionRecord.adverse_action_draft.
     """
     recommendation = state.get("agent_recommendation", "")
@@ -247,11 +259,16 @@ def node_draft_notice(state: AgentState) -> AgentState:
         _trace(state, "DRAFT_NOTICE", {"skipped": True, "reason": f"recommendation={recommendation}"})
         return state
 
-    fields: ApplicationFields = state["fields"]
-    breakdown: ScoreBreakdown = state["score_breakdown"]
-    log.info("node=DRAFT_NOTICE app=%s generating adverse-action draft", fields.application_id)
+    fields: ApplicationFields = state.get("fields")
+    breakdown: ScoreBreakdown = state.get("score_breakdown")
 
-    draft = run_draft_notice(breakdown, fields.application_id)
+    if fields is None or breakdown is None:
+        log.error("node=DRAFT_NOTICE missing fields or breakdown — skipping notice generation")
+        _trace(state, "DRAFT_NOTICE", {"skipped": True, "reason": "missing state keys"})
+        return state
+
+    log.info("node=DRAFT_NOTICE app=%s generating adverse-action draft", fields.application_id)
+    draft = run_draft_notice(breakdown, fields.application_id, recommendation)
     state["adverse_action_draft"] = draft
     _trace(state, "DRAFT_NOTICE", {"draft_length": len(draft)})
     return state

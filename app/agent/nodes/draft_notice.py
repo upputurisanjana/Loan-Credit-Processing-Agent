@@ -55,6 +55,37 @@ def _get_lender_details() -> tuple[str, str]:
     return name, contact
 
 
+def _make_fallback_draft(lender_name: str, lender_contact: str) -> str:
+    return (
+        "[DRAFT - LLM UNAVAILABLE - UNDERWRITER MUST COMPLETE THIS NOTICE BEFORE SENDING]\n\n"
+        "Dear Applicant,\n\n"
+        f"We regret to inform you that your credit application has been declined by {lender_name}.\n\n"
+        "Reasons: Please refer to the Score Breakdown panel for the specific factors\n"
+        "that contributed to this decision, including your Debt-to-Income ratio,\n"
+        "credit history score, and income stability assessment.\n\n"
+        "You have the right to request a free copy of your credit report from the\n"
+        "reporting agency used in this decision. You may also request a reconsideration\n"
+        "by submitting updated financial documentation.\n\n"
+        f"For questions, please contact us at: {lender_contact}\n\n"
+        f"Sincerely,\n{lender_name}\n"
+    )
+
+
+# Module-level constant using default lender values — used by tests and as
+# a stable fallback sentinel. Runtime calls use _fallback_draft() which
+# reads the actual env-configured lender name/contact.
+_FALLBACK_DRAFT: str = _make_fallback_draft(
+    "Credit Decisioning Ltd",
+    "Please contact us for further information.",
+)
+
+
+def _fallback_draft() -> str:
+    """Return a fallback draft populated with the env-configured lender details."""
+    lender_name, lender_contact = _get_lender_details()
+    return _make_fallback_draft(lender_name, lender_contact)
+
+
 def _build_messages(breakdown: ScoreBreakdown) -> list[dict[str, str]]:
     """Build the message list for the adverse-action notice draft."""
     lender_name, lender_contact = _get_lender_details()
@@ -113,19 +144,23 @@ Sincerely,
 """
 
 
-def run_draft_notice(breakdown: ScoreBreakdown, application_id: str) -> str:
+def run_draft_notice(breakdown: ScoreBreakdown, application_id: str, agent_recommendation: str = "decline") -> str:
     """
     Generate an adverse-action notice draft for a DECLINE decision.
+
+    Uses agent_recommendation (not breakdown.band) as the authoritative
+    signal — they can differ when challenger or fairness logic overrides
+    the scored band.
 
     Returns the draft text (may be a fallback if the LLM call fails).
     The returned text is NOT final — it must be reviewed and approved by
     the underwriter via NoticeEditor before any send.
     """
-    if breakdown.band != "decline":
+    if agent_recommendation != "decline":
         log.warning(
-            "app=%s draft_notice called for non-DECLINE band=%s — skipping",
+            "app=%s draft_notice called for non-DECLINE recommendation=%s — skipping",
             application_id,
-            breakdown.band,
+            agent_recommendation,
         )
         return ""
 
@@ -146,4 +181,11 @@ def run_draft_notice(breakdown: ScoreBreakdown, application_id: str) -> str:
         return draft
     except Exception as exc:  # noqa: BLE001
         log.error("app=%s draft_notice LLM call failed: %s", application_id, exc)
-        return _fallback_draft()
+        # Use env-configured lender details if set, otherwise fall back to the
+        # module-level constant (which uses the default lender name/contact).
+        lender_name, lender_contact = _get_lender_details()
+        default_name = "Credit Decisioning Ltd"
+        default_contact = "Please contact us for further information."
+        if lender_name == default_name and lender_contact == default_contact:
+            return _FALLBACK_DRAFT
+        return _make_fallback_draft(lender_name, lender_contact)

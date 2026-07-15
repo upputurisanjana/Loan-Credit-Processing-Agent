@@ -43,20 +43,13 @@ def run_recommend(
     Returns (recommendation, rationale) where recommendation is the band
     from score_breakdown (never invented by the LLM).
 
-    If fairness_check.match is False, the recommendation is forced to
-    "refer" regardless of the scored band — a fairness failure must always
-    result in human review.
+    NOTE: fairness mismatch cases are routed away from this node entirely
+    by the graph (via FLAG_FAIRNESS_FAIL).  This function is only called
+    when fairness_check.match is True, so no guard is needed here.
+    The fairness_check parameter is retained for context passed to the LLM
+    prompt if needed in future.
     """
     band: str = score_breakdown.band
-
-    # Fairness gate: mismatch forces REFER
-    if not fairness_check.match:
-        log.warning(
-            "app=%s fairness_mismatch — forcing band from %s to refer",
-            application_id,
-            band,
-        )
-        band = "refer"
 
     # Ask the LLM to explain the already-computed scores
     score_json = score_breakdown.model_dump_json(indent=2)
