@@ -42,7 +42,7 @@ POST /applications → VERIFY → EXTRACT (LLM) → SCORE (Python) →
 | DRAFT_NOTICE | LLM | Adverse-action notice for DECLINE (held, not sent) |
 | HUMAN_GATE | Terminal | All paths converge; awaits `POST /decision` |
 
-See [wiki/Pipeline.md](wiki/Pipeline.md) for the full walkthrough.
+See [Pipeline](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Pipeline) for the full walkthrough.
 
 ---
 
@@ -181,7 +181,6 @@ loan-agent/
 ├── tests/                        # pytest (86 tests)
 ├── scripts/                      # Utility scripts
 ├── docs/                         # Design documents
-├── wiki/                         # Project wiki
 ├── app.py                        # Streamlit frontend
 ├── requirements.txt
 ├── setup.ps1 / start.sh / start.ps1 / start.bat
@@ -192,18 +191,18 @@ loan-agent/
 
 ## Wiki
 
-Full documentation lives in the [`wiki/`](wiki/) directory:
+Full documentation lives on the [GitHub Wiki](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki):
 
 | Page | Description |
 |------|-------------|
-| [Architecture](wiki/Architecture.md) | System design, components, data flow |
-| [Pipeline](wiki/Pipeline.md) | Agent graph — every node and conditional edge |
-| [Policy Engine](wiki/Policy-Engine.md) | Deterministic scoring — weights, bands, clauses |
-| [Fairness & Governance](wiki/Fairness-Governance.md) | Identity-blind checks, audit trail, immutability |
-| [API Reference](wiki/API-Reference.md) | All REST endpoints with request/response schemas |
-| [Frontend](wiki/Frontend.md) | Streamlit + React UI guide |
-| [Deployment](wiki/Deployment.md) | Setup, config, deployment options |
-| [Contributing](wiki/Contributing.md) | How to extend — nodes, endpoints, tests |
+| [Architecture](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Architecture) | System design, components, data flow |
+| [Pipeline](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Pipeline) | Agent graph — every node and conditional edge |
+| [Policy Engine](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Policy-Engine) | Deterministic scoring — weights, bands, clauses |
+| [Fairness & Governance](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Fairness-Governance) | Identity-blind checks, audit trail, immutability |
+| [API Reference](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/API-Reference) | All REST endpoints with request/response schemas |
+| [Frontend](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Frontend) | Streamlit + React UI guide |
+| [Deployment](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Deployment) | Setup, config, deployment options |
+| [Contributing](https://github.com/upputurisanjana/Loan-Credit-Processing-Agent/wiki/Contributing) | How to extend — nodes, endpoints, tests |
 
 Additional design docs in [`docs/`](docs/):
 
