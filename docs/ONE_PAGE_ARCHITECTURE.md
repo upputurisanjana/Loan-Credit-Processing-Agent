@@ -71,7 +71,7 @@
    │ (append-only)│  │ bank_stmt.pdf│  │ → RECOMMEND       │
    │              │  │              │  │ → DRAFT_NOTICE    │
    │ decision_    │  │ .metadata.   │  │                   │
-   │ amendments   │  │  json        │  │ llama-3.1-70b     │
+   │ amendments   │  │  json        │  │                   │
    └──────────────┘  └──────────────┘  │ → CHALLENGER      │
                                         └───────────────────┘
 ```
