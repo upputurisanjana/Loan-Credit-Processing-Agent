@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { DecisionRecord, Band } from "../api/client";
+import DocumentsPanel from "../components/DocumentsPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -82,10 +83,10 @@ function DecisionBar({ record, onDecisionMade }: {
   record: DecisionRecord;
   onDecisionMade: (r: DecisionRecord) => void;
 }) {
-  const [reviewerId, setReviewerId]       = useState("");
+  const [reviewerId, setReviewerId]         = useState("");
   const [overrideReason, setOverrideReason] = useState("");
-  const [busy, setBusy]                   = useState(false);
-  const [err, setErr]                     = useState<string | null>(null);
+  const [busy, setBusy]                     = useState(false);
+  const [err, setErr]                       = useState<string | null>(null);
 
   const isDecided = record.human_decision !== null;
   const isPending = !isDecided && (
@@ -278,10 +279,30 @@ export default function ApplicationDetailPage() {
           <KV label="Loan Requested" value={record.loan_amount_requested > 0
             ? `£${record.loan_amount_requested.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
             : "—"} />
-          {record.applicant_notes && <KV label="Notes" value={record.applicant_notes} />}
+          {record.applicant_notes && (
+            <div className="flex gap-3 py-1.5 border-b border-slate-50 last:border-0">
+              <span className="text-xs text-slate-400 w-36 flex-shrink-0">Notes</span>
+              <div className="flex-1">
+                <p className="text-sm text-slate-800 break-words">{record.applicant_notes}</p>
+                <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                    <path d="M5 1L9 8.5H1L5 1Z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
+                    <path d="M5 4V6" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                    <circle cx="5" cy="7.5" r="0.4" fill="currentColor"/>
+                  </svg>
+                  Untrusted applicant input — not used in scoring
+                </p>
+              </div>
+            </div>
+          )}
         </Section>
 
-        {/* 2. Missing docs */}
+        {/* 2. Supporting Documents */}
+        <Section id="documents" label="Supporting Documents">
+          <DocumentsPanel applicationId={record.application_id} />
+        </Section>
+
+        {/* 3. Missing docs */}
         {record.missing_docs && record.missing_docs.length > 0 && (
           <Section id="missing-docs" label="Missing Documents" accent="warning">
             <ul className="text-sm text-amber-800 space-y-1">

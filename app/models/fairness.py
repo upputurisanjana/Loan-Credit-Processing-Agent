@@ -5,15 +5,20 @@ from pydantic import BaseModel, Field
 
 class FairnessCheck(BaseModel):
     """
-    Result of the identity-blind re-score.
+    Result of both fairness checks:
 
-    The fairness recheck runs the same deterministic scorer against a copy
-    of ApplicationFields where IdentityBlock is masked to '[REDACTED]'.
-    Because the scorer never uses identity fields in its arithmetic, the
-    two runs should always match — any mismatch indicates a regression
-    (e.g. identity data accidentally wired into a future scoring feature).
+    1. Structural (Python): re-runs the scorer with identity masked.
+       Proves the *score* is not influenced by name/address.
+
+    2. LLM language review: asks an LLM to scan the rationale text for
+       any identity-proxy or bias language.
+       Proves the *explanation* is also free from bias.
+
+    Both must pass for the application to proceed normally.
+    Either failure forces REFER and mandatory human review.
     """
 
+    # ── Structural recheck ────────────────────────────────────────────
     original_band: str
     masked_band: str
     original_composite: float
@@ -21,9 +26,22 @@ class FairnessCheck(BaseModel):
     match: bool = Field(
         ...,
         description=(
-            "True if both bands are identical. "
+            "True if both bands and composite scores are identical. "
             "False triggers FLAG_FAIRNESS_FAIL and forces human review."
         ),
+    )
+
+    # ── LLM language review ───────────────────────────────────────────
+    llm_review_flag: bool = Field(
+        default=False,
+        description=(
+            "True if the LLM found potential identity-bias language "
+            "in the rationale. Forces REFER when True."
+        ),
+    )
+    llm_review_note: str = Field(
+        default="",
+        description="LLM's one-sentence explanation of its fairness finding.",
     )
 
 

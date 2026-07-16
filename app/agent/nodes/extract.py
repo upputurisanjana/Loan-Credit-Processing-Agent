@@ -19,10 +19,12 @@ stated values from ApplicationRaw.
 
 import json
 import logging
+from pathlib import Path
 
 from app.models.application import ApplicationFields, ApplicationRaw, IdentityBlock
 from app.agent.prompts.extract_prompt import build_extract_prompt
 from app.tools.github_models_client import call_model, get_primary_model
+from app.tools.ocr import ocr_application_documents
 
 log = logging.getLogger(__name__)
 
@@ -31,17 +33,37 @@ def run_extract(raw: ApplicationRaw) -> ApplicationFields:
     """
     Call the primary LLM to extract structured fields from ApplicationRaw.
 
+    Step 1: OCR — replace applicant-supplied extracted_text with real OCR
+            output from the uploaded file bytes. This removes the attack
+            surface where an applicant could submit crafted text.
+            Falls back gracefully if no file is uploaded or OCR fails.
+
+    Step 2: LLM extraction — parse OCR'd text into structured JSON fields.
+            All content is wrapped in <applicant_data> tags and treated as
+            UNTRUSTED INPUT regardless of its source.
+
     Falls back to ApplicationRaw.stated_* values if the LLM cannot extract
-    a field or returns an invalid/null value — so the pipeline never halts
-    due to a partial extraction.
+    a field or returns an invalid/null value.
     """
-    # Collect available document texts
+    # ── Step 1: Replace submitted extracted_text with real OCR output ──
+    ocr_documents = ocr_application_documents(raw.application_id, list(raw.documents))
+
+    # Collect OCR'd (or original fallback) text
     doc_texts = [
         doc.extracted_text
-        for doc in raw.documents
+        for doc in ocr_documents
         if doc.extracted_text
     ]
 
+    # Log whether we got real OCR or fell back
+    ocr_count = sum(
+        1 for orig, ocr in zip(raw.documents, ocr_documents)
+        if ocr.extracted_text != orig.extracted_text
+    )
+    log.info("app=%s OCR replaced text for %d/%d documents",
+             raw.application_id, ocr_count, len(raw.documents))
+
+    # ── Step 2: LLM extraction from OCR'd text ─────────────────────────
     raw_json = raw.model_dump_json(indent=2)
     messages = build_extract_prompt(raw_json, doc_texts)
 

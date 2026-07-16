@@ -1,0 +1,26 @@
+{
+  "id.pdf": {
+    "doc_type": "other",
+    "doc_type_label": "Other Document",
+    "verification_status": "pending",
+    "verification_note": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "pay_stub.pdf": {
+    "doc_type": "other",
+    "doc_type_label": "Other Document",
+    "verification_status": "pending",
+    "verification_note": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "bank_statement.pdf": {
+    "doc_type": "other",
+    "doc_type_label": "Other Document",
+    "verification_status": "pending",
+    "verification_note": null,
+    "verified_by": null,
+    "verified_at": null
+  }
+}

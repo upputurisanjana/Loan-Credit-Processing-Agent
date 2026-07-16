@@ -517,15 +517,25 @@ def render_sidebar() -> str:
 # PAGE: Submit Application
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _upload_files_to_backend(app_id: str, files: list) -> None:
-    """Upload files to POST /applications/{id}/documents using multipart."""
-    if not files:
+def _upload_files_to_backend(app_id: str, files_with_types: list) -> None:
+    """Upload files to POST /applications/{id}/documents using multipart.
+    
+    files_with_types: list of (UploadedFile, doc_type_str) tuples.
+    """
+    if not files_with_types:
         return
-    multipart_files = [("files", (f.name, f.getvalue(), f.type or "application/octet-stream")) for f in files]
+
+    multipart_files = [
+        ("files", (f.name, f.getvalue(), f.type or "application/octet-stream"))
+        for f, _ in files_with_types
+    ]
+    doc_types_str = ",".join(t for _, t in files_with_types)
+
     try:
         r = requests.post(
             f"{API_BASE}/applications/{app_id}/documents",
             files=multipart_files,
+            data={"doc_types": doc_types_str},
             timeout=60,
         )
         r.raise_for_status()
@@ -542,7 +552,41 @@ def page_submit() -> None:
     # ─────────────────────────────────────────────────────────────────
     # TAB 1 — Submit a new application
     # ─────────────────────────────────────────────────────────────────
+    # Initialise submit success flag
+    if "submit_success" not in st.session_state:
+        st.session_state.submit_success = False
+
+    # ─────────────────────────────────────────────────────────────────
+    # TAB 1 — Submit a new application
+    # ─────────────────────────────────────────────────────────────────
     with tab_new:
+        # ── If just submitted, show success screen instead of form ────
+        if st.session_state.get("submit_success"):
+            submitted_id = st.session_state.get("last_submitted", "")
+            st.markdown(
+                f'<div style="text-align:center;padding:2rem 1rem;">'
+                f'  <div style="font-size:3rem;margin-bottom:1rem;">✅</div>'
+                f'  <h2 style="font-size:1.25rem;font-weight:700;color:#0F172A;margin:0 0 .5rem;">Application Submitted!</h2>'
+                f'  <p style="font-size:.875rem;color:#475569;margin-bottom:1.5rem;">'
+                f'    Your application has been received and is now under review.</p>'
+                f'  <div style="display:inline-block;padding:.75rem 1.5rem;background:#EFF6FF;'
+                f'border:1px solid #BFDBFE;border-radius:.5rem;margin-bottom:1.5rem;">'
+                f'    <div style="font-size:.7rem;color:#1D4ED8;font-weight:600;text-transform:uppercase;'
+                f'letter-spacing:.07em;margin-bottom:.25rem;">Your Reference Number</div>'
+                f'    <div style="font-size:1.25rem;font-weight:700;color:#1E3A8A;font-family:monospace;">'
+                f'{submitted_id}</div>'
+                f'  </div>'
+                f'  <p style="font-size:.8125rem;color:#64748B;">Use this reference number in the '
+                f'<b>Check Application Status</b> tab to track your outcome.</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Submit Another Application", use_container_width=False):
+                st.session_state.submit_success = False
+                st.session_state.last_submitted = ""
+                st.rerun()
+            return
+
         st.markdown("### Submit New Application")
         st.markdown(
             '<p style="font-size:.8125rem;color:#64748B;margin-top:-.25rem;margin-bottom:1.25rem;">'
@@ -702,20 +746,20 @@ def page_submit() -> None:
                         if "draft_app_id" in st.session_state:
                             del st.session_state["draft_app_id"]
 
-                        # Upload the actual files to the documents endpoint
-                        files_to_upload = [f for f in [id_file, ps_file, bs_file, other_file] if f is not None]
+                        # Upload the actual files with their explicit doc types
+                        files_with_types = [
+                            (id_file,    "id"),
+                            (ps_file,    "pay_stub"),
+                            (bs_file,    "bank_statement"),
+                            (other_file, "other"),
+                        ]
+                        files_to_upload = [(f, t) for f, t in files_with_types if f is not None]
                         with st.spinner("Uploading your documents…"):
                             _upload_files_to_backend(app_result_id, files_to_upload)
 
-                        st.success(f"✅ Application **{app_result_id}** submitted successfully and is now awaiting reviewer decision.")
-                        st.markdown(
-                            f'<div class="card"><div class="card-body">'
-                            f'<p style="font-size:.8125rem;color:#374151;margin:0;">'
-                            f'Your documents have been uploaded. You will be notified once a reviewer has made a decision. '
-                            f'Use the <b>Check Application Status</b> tab above to see your outcome at any time.</p>'
-                            f'</div></div>',
-                            unsafe_allow_html=True,
-                        )
+                        # Show success screen and reset the form
+                        st.session_state.submit_success = True
+                        st.rerun()
 
     # ─────────────────────────────────────────────────────────────────
     # TAB 2 — Check outcome of a submitted application
@@ -733,130 +777,145 @@ def page_submit() -> None:
             lookup_id = st.text_input(
                 "Application ID",
                 value=st.session_state.get("last_submitted", ""),
-                placeholder="APP-001",
+                placeholder="APP-XXXXXX",
                 key="status_lookup_id",
                 label_visibility="collapsed",
             )
         with col_btn:
             check_btn = st.button("Check Status", key="status_check_btn", use_container_width=True)
 
+        # Only fetch from backend when button is clicked — cache result in
+        # session state so Streamlit reruns don't cause repeated API calls.
         if check_btn and lookup_id.strip():
-            try:
-                rec = api_get_application(lookup_id.strip())
-            except requests.HTTPError:
-                st.error(f"Application **{lookup_id.strip()}** not found. Check your Application ID.")
-                rec = None
-            except requests.ConnectionError:
-                st.error("Cannot reach the processing server. Please try again later.")
-                rec = None
-
-            if rec:
-                human_decision = rec.get("human_decision")
-                status         = rec.get("status", "")
-                app_id_display = rec.get("application_id", lookup_id.strip())
-
-                if not human_decision:
-                    # Still pending
-                    st.markdown(
-                        f'<div class="card"><div class="card-body">'
-                        f'<div style="display:flex;align-items:center;gap:.75rem;">'
-                        f'  <div style="font-size:1.5rem;">⏳</div>'
-                        f'  <div>'
-                        f'    <div style="font-size:.9375rem;font-weight:600;color:#0F172A;">{app_id_display}</div>'
-                        f'    <div style="font-size:.8125rem;color:#64748B;margin-top:2px;">'
-                        f'      Your application is currently <b>under review</b>. '
-                        f'      Please check back later.</div>'
-                        f'  </div>'
-                        f'</div></div></div>',
-                        unsafe_allow_html=True,
-                    )
-
-                elif human_decision == "approve":
-                    decided_at = _fmt_ts(rec.get("decided_at"))
-                    reviewer   = rec.get("human_reviewer", "—")
-                    loan_amt   = ""
-                    st.markdown(
-                        f'<div class="card" style="border-color:#BBF7D0;">'
-                        f'<div class="card-header success">✅ Application Approved</div>'
-                        f'<div class="card-body">'
-                        f'  <div style="font-size:1rem;font-weight:600;color:#15803D;margin-bottom:.5rem;">'
-                        f'    Congratulations! Your credit application has been <b>approved</b>.</div>'
-                        f'  <div style="font-size:.8125rem;color:#374151;margin-bottom:.75rem;">'
-                        f'    Application <b>{app_id_display}</b> was reviewed and approved on {decided_at}.</div>'
-                        f'  <div style="font-size:.75rem;color:#64748B;">'
-                        f'    Reviewed by: {reviewer}</div>'
-                        f'</div></div>',
-                        unsafe_allow_html=True,
-                    )
-
-                elif human_decision in ("decline", "refer"):
-                    # Show the adverse action / rejection letter
-                    decided_at   = _fmt_ts(rec.get("decided_at"))
-                    reviewer     = rec.get("human_reviewer", "—")
-                    # Prefer reviewer-approved notice; fall back to raw draft
-                    adv_draft    = rec.get("approved_notice_text") or rec.get("adverse_action_draft") or ""
-                    notice_label = (
-                        "Formal Notice from Reviewer (Approved)"
-                        if rec.get("approved_notice_text")
-                        else "Formal Notice (Draft)"
-                    )
-                    override_rsn = rec.get("override_reason") or ""
-                    rationale    = rec.get("rationale", "")
-
-                    label  = "Declined" if human_decision == "decline" else "Referred for Further Review"
-                    accent = "danger"   if human_decision == "decline" else "warning"
-                    icon   = "❌"        if human_decision == "decline" else "⚠"
-
-                    st.markdown(
-                        f'<div class="card" style="border-color:{"#FECDD3" if human_decision=="decline" else "#FDE68A"};">'
-                        f'<div class="card-header {accent}">{icon} Application {label}</div>'
-                        f'<div class="card-body">'
-                        f'  <div style="font-size:.8125rem;color:#374151;margin-bottom:.75rem;">'
-                        f'    Application <b>{app_id_display}</b> was reviewed on {decided_at} by {reviewer}.</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    # Adverse action letter (the reviewer's formal notice)
-                    if adv_draft:
-                        st.markdown(
-                            f'<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
-                            f'letter-spacing:.08em;color:#64748B;margin-bottom:.4rem;">{notice_label}</div>',
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown(
-                            f'<div style="background:#FFF8F8;border:1px solid #FECDD3;border-radius:.375rem;'
-                            f'padding:1rem;font-size:.8125rem;color:#374151;line-height:1.7;'
-                            f'white-space:pre-wrap;">{adv_draft}</div>',
-                            unsafe_allow_html=True,
-                        )
-                    elif rationale:
-                        # Fallback: show the agent rationale if no formal notice yet
-                        st.markdown(
-                            '<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
-                            'letter-spacing:.08em;color:#64748B;margin-bottom:.4rem;">Reason for Decision</div>',
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown(
-                            f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:.375rem;'
-                            f'padding:1rem;font-size:.8125rem;color:#374151;line-height:1.7;">{rationale}</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                    if override_rsn:
-                        st.markdown(
-                            f'<div style="margin-top:.75rem;padding:.6rem .75rem;background:#FFFBEB;'
-                            f'border:1px solid #FDE68A;border-radius:.375rem;">'
-                            f'<b style="font-size:.7rem;text-transform:uppercase;color:#B45309;">Additional Notes</b>'
-                            f'<p style="font-size:.8rem;color:#78350F;margin:.2rem 0 0 0;">{override_rsn}</p>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                    st.markdown("</div></div>", unsafe_allow_html=True)
+            clean_id = lookup_id.strip().upper()
+            with st.spinner("Fetching your application status…"):
+                try:
+                    rec = api_get_application(clean_id)
+                    st.session_state.status_cache     = rec
+                    st.session_state.status_cache_id  = clean_id
+                    st.session_state.status_error     = None
+                except requests.HTTPError:
+                    st.session_state.status_cache    = None
+                    st.session_state.status_cache_id = clean_id
+                    st.session_state.status_error    = f"Application **{clean_id}** not found. Check your reference number."
+                except requests.ConnectionError:
+                    st.session_state.status_cache    = None
+                    st.session_state.status_cache_id = None
+                    st.session_state.status_error    = "Cannot reach the processing server. Please try again later."
 
         elif check_btn and not lookup_id.strip():
             st.warning("Please enter your Application ID.")
 
+        # Display cached result (no API call on rerender)
+        status_error = st.session_state.get("status_error")
+        rec          = st.session_state.get("status_cache")
+
+        if status_error:
+            st.error(status_error)
+
+        if rec:
+            human_decision = rec.get("human_decision")
+            status         = rec.get("status", "")
+            app_id_display = rec.get("application_id", lookup_id.strip())
+
+            if not human_decision:
+                # Still pending
+                st.markdown(
+                    f'<div class="card"><div class="card-body">'
+                    f'<div style="display:flex;align-items:center;gap:.75rem;">'
+                    f'  <div style="font-size:1.5rem;">⏳</div>'
+                    f'  <div>'
+                    f'    <div style="font-size:.9375rem;font-weight:600;color:#0F172A;">{app_id_display}</div>'
+                    f'    <div style="font-size:.8125rem;color:#64748B;margin-top:2px;">'
+                    f'      Your application is currently <b>under review</b>. '
+                    f'      Please check back later.</div>'
+                    f'  </div>'
+                    f'</div></div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            elif human_decision == "approve":
+                decided_at = _fmt_ts(rec.get("decided_at"))
+                reviewer   = rec.get("human_reviewer", "—")
+                loan_amt   = ""
+                st.markdown(
+                    f'<div class="card" style="border-color:#BBF7D0;">'
+                    f'<div class="card-header success">✅ Application Approved</div>'
+                    f'<div class="card-body">'
+                    f'  <div style="font-size:1rem;font-weight:600;color:#15803D;margin-bottom:.5rem;">'
+                    f'    Congratulations! Your credit application has been <b>approved</b>.</div>'
+                    f'  <div style="font-size:.8125rem;color:#374151;margin-bottom:.75rem;">'
+                    f'    Application <b>{app_id_display}</b> was reviewed and approved on {decided_at}.</div>'
+                    f'  <div style="font-size:.75rem;color:#64748B;">'
+                    f'    Reviewed by: {reviewer}</div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            elif human_decision in ("decline", "refer"):
+                # Show the adverse action / rejection letter
+                decided_at   = _fmt_ts(rec.get("decided_at"))
+                reviewer     = rec.get("human_reviewer", "—")
+                # Prefer reviewer-approved notice; fall back to raw draft
+                adv_draft    = rec.get("approved_notice_text") or rec.get("adverse_action_draft") or ""
+                notice_label = (
+                    "Formal Notice from Reviewer (Approved)"
+                    if rec.get("approved_notice_text")
+                    else "Formal Notice (Draft)"
+                )
+                override_rsn = rec.get("override_reason") or ""
+                rationale    = rec.get("rationale", "")
+
+                label  = "Declined" if human_decision == "decline" else "Referred for Further Review"
+                accent = "danger"   if human_decision == "decline" else "warning"
+                icon   = "❌"        if human_decision == "decline" else "⚠"
+
+                st.markdown(
+                    f'<div class="card" style="border-color:{"#FECDD3" if human_decision=="decline" else "#FDE68A"};">'
+                    f'<div class="card-header {accent}">{icon} Application {label}</div>'
+                    f'<div class="card-body">'
+                    f'  <div style="font-size:.8125rem;color:#374151;margin-bottom:.75rem;">'
+                    f'    Application <b>{app_id_display}</b> was reviewed on {decided_at} by {reviewer}.</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Adverse action letter (the reviewer's formal notice)
+                if adv_draft:
+                    st.markdown(
+                        f'<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
+                        f'letter-spacing:.08em;color:#64748B;margin-bottom:.4rem;">{notice_label}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f'<div style="background:#FFF8F8;border:1px solid #FECDD3;border-radius:.375rem;'
+                        f'padding:1rem;font-size:.8125rem;color:#374151;line-height:1.7;'
+                        f'white-space:pre-wrap;">{adv_draft}</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif rationale:
+                    # Fallback: show the agent rationale if no formal notice yet
+                    st.markdown(
+                        '<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
+                        'letter-spacing:.08em;color:#64748B;margin-bottom:.4rem;">Reason for Decision</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:.375rem;'
+                        f'padding:1rem;font-size:.8125rem;color:#374151;line-height:1.7;">{rationale}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                if override_rsn:
+                    st.markdown(
+                        f'<div style="margin-top:.75rem;padding:.6rem .75rem;background:#FFFBEB;'
+                        f'border:1px solid #FDE68A;border-radius:.375rem;">'
+                        f'<b style="font-size:.7rem;text-transform:uppercase;color:#B45309;">Additional Notes</b>'
+                        f'<p style="font-size:.8rem;color:#78350F;margin:.2rem 0 0 0;">{override_rsn}</p>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

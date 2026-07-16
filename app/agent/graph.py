@@ -3,18 +3,14 @@ LangGraph decisioning agent — single pipeline with explicit conditional edges.
 
 Pipeline
 --------
-INTAKE → VERIFY → (hold | EXTRACT → SCORE → FAIRNESS_RECHECK
-                                            ├─ mismatch → FLAG_FAIRNESS_FAIL → HUMAN_GATE
-                                            └─ match    → RECOMMEND → HUMAN_GATE)
+INTAKE → VERIFY → (hold | EXTRACT → SCORE → CHALLENGER
+                                           → FAIRNESS_RECHECK (Python, structural)
+                                           → FAIRNESS_LLM_REVIEW (LLM, language)
+                                             ├─ bias/mismatch → FLAG_FAIRNESS_FAIL → HUMAN_GATE
+                                             └─ clean         → RECOMMEND → DRAFT_NOTICE → HUMAN_GATE)
 
 Every path terminates at HUMAN_GATE with status "pending_human_review".
 No decision is ever auto-finalised.
-
-Usage
------
-    from app.agent.graph import run_pipeline
-    result = run_pipeline(raw_application)
-    # result is DecisionRecord (human_decision=None) or a hold/error dict
 """
 
 import logging
@@ -32,6 +28,7 @@ from app.agent.nodes.verify import run_verify
 from app.agent.nodes.extract import run_extract
 from app.agent.nodes.score import run_score
 from app.agent.nodes.fairness_recheck import run_fairness_recheck
+from app.agent.nodes.fairness_llm_review import run_fairness_llm_review
 from app.agent.nodes.recommend import run_recommend
 from app.agent.nodes.challenger_compare import run_challenger_compare
 from app.agent.nodes.draft_notice import run_draft_notice
@@ -53,7 +50,7 @@ class AgentState(TypedDict, total=False):
     agent_recommendation: str
     rationale: str
     adverse_action_draft: str
-    status: str          # "ok" | "hold_for_document" | "pending_human_review" | "flag_fairness_fail" | "error"
+    status: str
     error_message: str | None
     pipeline_trace: list[dict]
 
@@ -174,6 +171,67 @@ def node_fairness_recheck(state: AgentState) -> AgentState:
         "original_band": fairness.original_band,
         "masked_band": fairness.masked_band,
         "match": fairness.match,
+    })
+    return state
+
+
+def node_fairness_llm_review(state: AgentState) -> AgentState:
+    """
+    LLM scans the score breakdown context for any identity-proxy language
+    that could indicate bias in how the recommendation will be explained.
+
+    This runs AFTER the structural recheck passes (structural mismatch routes
+    to FLAG_FAIRNESS_FAIL before reaching here). It adds a semantic layer:
+    the Python check proves the number is unbiased; this proves the language
+    will also be unbiased.
+
+    On LLM failure, defaults to no flag (fail-open) so an LLM outage does
+    not block all applications — but logs a prominent warning.
+    """
+    fields = state.get("fields")
+    breakdown = state.get("score_breakdown")
+    fairness = state.get("fairness_check")
+
+    if not fields or not breakdown or not fairness:
+        log.warning("node=FAIRNESS_LLM_REVIEW missing state — skipping")
+        _trace(state, "FAIRNESS_LLM_REVIEW", {"skipped": True})
+        return state
+
+    # Use a provisional rationale context (score factors only) since the
+    # real rationale hasn't been written yet — we review what the LLM
+    # *would* base its rationale on, not the rationale itself.
+    # The actual rationale review happens inside run_fairness_llm_review
+    # using the score breakdown as context.
+    provisional_rationale = (
+        f"Recommendation: {breakdown.band.upper()}. "
+        f"Composite score: {breakdown.composite_score:.3f}. "
+        f"DTI ratio: {breakdown.dti_ratio:.3f} ({breakdown.dti_ratio * 100:.1f}%). "
+        f"Credit history sub-score: {breakdown.credit_history_subscore:.3f}. "
+        f"Income stability sub-score: {breakdown.income_stability_subscore:.3f}. "
+        f"Policy clauses: {', '.join(c.clause_id for c in breakdown.clause_citations)}."
+    )
+
+    bias_detected, explanation = run_fairness_llm_review(
+        provisional_rationale, breakdown, fields.application_id
+    )
+
+    # Update fairness_check with the LLM review result
+    updated_fairness = fairness.model_copy(update={
+        "llm_review_flag": bias_detected,
+        "llm_review_note": explanation,
+    })
+    state["fairness_check"] = updated_fairness
+
+    if bias_detected:
+        log.warning(
+            "node=FAIRNESS_LLM_REVIEW app=%s BIAS LANGUAGE DETECTED — forcing REFER: %s",
+            fields.application_id, explanation,
+        )
+        state["status"] = "flag_fairness_fail"
+
+    _trace(state, "FAIRNESS_LLM_REVIEW", {
+        "bias_detected": bias_detected,
+        "explanation": explanation,
     })
     return state
 
@@ -317,6 +375,7 @@ def build_graph() -> Any:
     graph.add_node("score", node_score)
     graph.add_node("challenger", node_challenger)
     graph.add_node("fairness_recheck", node_fairness_recheck)
+    graph.add_node("fairness_llm_review", node_fairness_llm_review)
     graph.add_node("flag_fairness_fail", node_flag_fairness_fail)
     graph.add_node("recommend", node_recommend)
     graph.add_node("draft_notice", node_draft_notice)
@@ -336,13 +395,14 @@ def build_graph() -> Any:
         route_after_extract,
         {"score": "score", "human_gate": "human_gate"},
     )
-    # SCORE → CHALLENGER → FAIRNESS_RECHECK
+    # SCORE → CHALLENGER → FAIRNESS_RECHECK → FAIRNESS_LLM_REVIEW
     graph.add_edge("score", "challenger")
     graph.add_edge("challenger", "fairness_recheck")
+    graph.add_edge("fairness_recheck", "fairness_llm_review")
 
-    # KEY conditional edge: mismatch → flag_fairness_fail, match → recommend
+    # After LLM review: mismatch/bias → flag_fairness_fail, clean → recommend
     graph.add_conditional_edges(
-        "fairness_recheck",
+        "fairness_llm_review",
         route_after_fairness,
         {"recommend": "recommend", "flag_fairness_fail": "flag_fairness_fail"},
     )

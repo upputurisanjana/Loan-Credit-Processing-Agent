@@ -195,6 +195,17 @@ export const api = {
   getQueue: () => request<QueueItem[]>("/queue"),
   getApplication: (id: string) =>
     request<DecisionRecord>(`/applications/${id}`),
+  listDocuments: (id: string) =>
+    request<{ application_id: string; documents: DocumentMeta[] }>(`/applications/${id}/documents`),
+  verifyDocument: (
+    id: string,
+    filename: string,
+    body: { verification_status: "verified" | "rejected"; verified_by: string; verification_note?: string },
+  ) =>
+    request<DocumentMeta>(`/applications/${id}/documents/${encodeURIComponent(filename)}/verify`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   recordDecision: (
     id: string,
     body: { human_decision: Band; human_reviewer: string; override_reason?: string },
@@ -220,4 +231,6 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getPdfUrl: (id: string) => `${BASE}/applications/${id}/pdf`,
+  getDocumentUrl: (id: string, filename: string) =>
+    `${BASE}/applications/${id}/documents/${encodeURIComponent(filename)}`,
 };
