@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B08",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Tom Lawson",
   "applicant_address": "42 Pine Road, Cardiff, CF10 1AB",
@@ -7,24 +6,9 @@
   "stated_monthly_debt": 770.0,
   "loan_amount_requested": 20000.0,
   "applicant_notes": "Debt was resolved in 2021.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B08/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "DRIVING LICENCE\nName: Tom Lawson\nDate of Birth: 1977-03-25\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B08/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Tom Lawson\nEmployer: Cardiff Logistics plc\nMonthly Gross Income: 5500.00\nEmployment Start: 2012-05-01\nMonths in Current Role: 170"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B08/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Tom Lawson\nStatement Period: April-June 2026\nMonthly Income Credits: 3740.00\nRegular Debt Payments: 770.00\nCredit History: 8.0 years\nCredit Flags: default_older"
-    }
-  ]
+  "credit_history_years": 8.0,
+  "credit_history_flags": [
+    "default_older"
+  ],
+  "employment_months_current": 170
 }

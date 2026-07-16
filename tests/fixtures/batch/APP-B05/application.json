@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B05",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Rachel Green",
   "applicant_address": "31 Birch Lane, Edinburgh, EH1 1YZ",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 1044.0,
   "loan_amount_requested": 20000.0,
   "applicant_notes": "Studio equipment upgrade.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B05/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "PASSPORT\nName: Rachel Green\nDate of Birth: 1990-04-18\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B05/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Rachel Green\nEmployer: Self-employed (Freelance Designer)\nMonthly Gross Income: 5800.00\nEmployment Start: 2020-01-01\nMonths in Current Role: 78"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B05/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Rachel Green\nStatement Period: April-June 2026\nMonthly Income Credits: 3944.00\nRegular Debt Payments: 1044.00\nCredit History: 5.5 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 5.5,
+  "credit_history_flags": [],
+  "employment_months_current": 78
 }

@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B06",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "David Chen",
   "applicant_address": "67 Maple Avenue, Manchester, M2 5NP",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 1296.0,
   "loan_amount_requested": 30000.0,
   "applicant_notes": "Home extension.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B06/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "DRIVING LICENCE\nName: David Chen\nDate of Birth: 1982-12-01\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B06/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: David Chen\nEmployer: Manchester NHS Trust\nMonthly Gross Income: 7200.00\nEmployment Start: 2014-06-01\nMonths in Current Role: 145"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B06/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: David Chen\nStatement Period: April-June 2026\nMonthly Income Credits: 4896.00\nRegular Debt Payments: 1296.00\nCredit History: 10.0 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 10.0,
+  "credit_history_flags": [],
+  "employment_months_current": 145
 }

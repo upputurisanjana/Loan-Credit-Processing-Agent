@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B02",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "James Patel",
   "applicant_address": "88 Oak Road, Leeds, LS1 3DQ",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 810.0,
   "loan_amount_requested": 18000.0,
   "applicant_notes": "Purchasing a new vehicle.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B02/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "DRIVING LICENCE\nName: James Patel\nDate of Birth: 1979-11-05\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B02/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: James Patel\nEmployer: Northern Rail Ltd\nMonthly Gross Income: 4500.00\nEmployment Start: 2019-07-01\nMonths in Current Role: 84"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B02/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: James Patel\nStatement Period: April-June 2026\nMonthly Income Credits: 3060.00\nRegular Debt Payments: 810.00\nCredit History: 6.5 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 6.5,
+  "credit_history_flags": [],
+  "employment_months_current": 84
 }

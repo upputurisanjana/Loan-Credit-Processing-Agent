@@ -1,0 +1,20 @@
+[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[33m                         [100%][0m
+[33m============================== warnings summary ===============================[0m
+.venv\Lib\site-packages\langgraph\cache\base\__init__.py:8
+  C:\Users\sanju\OneDrive\Documents\Gen AI workshop\Loan-Credit-Processing-Agent\.venv\Lib\site-packages\langgraph\cache\base\__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+tests/test_scenarios.py::TestScenario1ClearApprove::test_human_gate_holds
+  C:\Users\sanju\OneDrive\Documents\Gen AI workshop\Loan-Credit-Processing-Agent\tests\test_scenarios.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_scenarios.py::TestScenario2BorderlineRefer::test_never_auto_decided
+  C:\Users\sanju\OneDrive\Documents\Gen AI workshop\Loan-Credit-Processing-Agent\tests\test_scenarios.py:197: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_scenarios.py::TestScenario5PromptInjection::test_human_gate_holds
+  C:\Users\sanju\OneDrive\Documents\Gen AI workshop\Loan-Credit-Processing-Agent\tests\test_scenarios.py:429: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+[33m[32m48 passed[0m, [33m[1m4 warnings[0m[33m in 1.32s[0m[0m

@@ -590,96 +590,75 @@ def page_submit() -> None:
         st.markdown("### Submit New Application")
         st.markdown(
             '<p style="font-size:.8125rem;color:#64748B;margin-top:-.25rem;margin-bottom:1.25rem;">'
-            "Fill in your details, upload your supporting documents, and run the pipeline.</p>",
+            "Upload your application JSON file and supporting documents, then click Submit.</p>",
             unsafe_allow_html=True,
         )
 
-        # Auto-generate a unique application ID once per session (immutable to applicant)
-        if "draft_app_id" not in st.session_state:
-            import random, string
-            suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-            st.session_state.draft_app_id = f"APP-{suffix}"
-
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;'
-            f'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:.5rem;margin-bottom:1rem;">'
-            f'<div style="font-size:.75rem;color:#1D4ED8;font-weight:600;text-transform:uppercase;'
-            f'letter-spacing:.07em;">Your Reference Number</div>'
-            f'<div style="font-size:1rem;font-weight:700;color:#1E3A8A;font-family:monospace;">'
-            f'{st.session_state.draft_app_id}</div>'
-            f'<div style="font-size:.7rem;color:#6B7280;margin-left:auto;">'
-            f'Save this — you will need it to check your status</div>'
-            f'</div>',
-            unsafe_allow_html=True,
+        # ── Step 1: JSON upload (outside form so we can parse + preview live) ──
+        json_file = st.file_uploader(
+            "Application JSON *  (application.json from your fixture folder)",
+            type=["json"],
+            key="json_file",
+            help="Upload the application.json file. All fields (name, income, credit history, etc.) are read from it.",
         )
 
+        # Parse and preview the JSON as soon as it's uploaded
+        parsed_payload = None
+        if json_file is not None:
+            try:
+                raw_bytes = json_file.read()
+                parsed_payload = json.loads(raw_bytes)
+                # Show a clean preview card
+                name_preview   = parsed_payload.get("applicant_name", "—")
+                income_preview = parsed_payload.get("stated_income", 0)
+                debt_preview   = parsed_payload.get("stated_monthly_debt", 0)
+                loan_preview   = parsed_payload.get("loan_amount_requested", 0)
+                ch_years       = parsed_payload.get("credit_history_years", "—")
+                emp_months     = parsed_payload.get("employment_months_current", "—")
+                ch_flags       = parsed_payload.get("credit_history_flags", [])
+                flag_str       = ", ".join(ch_flags) if ch_flags else "none"
+                st.markdown(
+                    f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:.5rem;'
+                    f'padding:.75rem 1rem;margin-bottom:.75rem;">'
+                    f'<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
+                    f'letter-spacing:.07em;color:#15803D;margin-bottom:.5rem;">JSON loaded successfully</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;font-size:.8rem;">'
+                    f'<div><span style="color:#64748B;">Name:</span> <b>{name_preview}</b></div>'
+                    f'<div><span style="color:#64748B;">Loan:</span> <b>£{loan_preview:,.0f}</b></div>'
+                    f'<div><span style="color:#64748B;">Income:</span> <b>£{income_preview:,.0f}/mo</b></div>'
+                    f'<div><span style="color:#64748B;">Monthly Debt:</span> <b>£{debt_preview:,.0f}/mo</b></div>'
+                    f'<div><span style="color:#64748B;">Credit History:</span> <b>{ch_years} yrs</b></div>'
+                    f'<div><span style="color:#64748B;">Employment:</span> <b>{emp_months} months</b></div>'
+                    f'<div style="grid-column:span 3"><span style="color:#64748B;">Credit Flags:</span> <b>{flag_str}</b></div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+            except Exception as exc:
+                st.error(f"Could not parse JSON: {exc}")
+                parsed_payload = None
+
+        # ── Step 2: Document file uploads + submit (inside form) ─────────────
         with st.form("submit_form", clear_on_submit=False):
-            # ── Application identity ──────────────────────────────────
-            st.markdown(
-                '<div class="card-header" style="border-radius:.5rem .5rem 0 0;">Your Details</div>',
-                unsafe_allow_html=True,
-            )
-            name    = st.text_input("Full Name *", placeholder="Jane Smith")
-            address = st.text_input("Address *", placeholder="42 Maple Street, London, EC1A 1BB")
-            notes   = st.text_area("Additional Notes (optional)", placeholder="Any context the reviewer should know…", height=70)
-
-            st.divider()
-
-            # ── Financials ────────────────────────────────────────────
-            st.markdown(
-                '<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
-                'letter-spacing:.08em;color:#64748B;margin-bottom:.5rem;">Financial Details</div>',
-                unsafe_allow_html=True,
-            )
-            col3, col4, col5 = st.columns(3)
-            with col3:
-                income       = st.number_input("Monthly Income (£) *", min_value=0.01, value=5000.0, step=100.0)
-            with col4:
-                monthly_debt = st.number_input("Monthly Debt (£) *",   min_value=0.0,  value=1200.0, step=50.0)
-            with col5:
-                loan_amount  = st.number_input("Loan Requested (£) *", min_value=0.01, value=20000.0, step=500.0)
-
-            st.divider()
-
-            # ── Document uploads ──────────────────────────────────────
             st.markdown(
                 '<div style="font-size:.7rem;font-weight:600;text-transform:uppercase;'
                 'letter-spacing:.08em;color:#64748B;margin-bottom:.3rem;">Supporting Documents</div>'
                 '<p style="font-size:.75rem;color:#94A3B8;margin-bottom:.75rem;">'
-                "Upload your ID, pay stub, and bank statement. Accepted: PDF, PNG, JPG, TIFF (max 20 MB each).</p>",
+                "Upload the physical files (ID, pay stub, bank statement). "
+                "Accepted: PDF, PNG, JPG, TIFF (max 20 MB each).</p>",
                 unsafe_allow_html=True,
             )
+            id_file    = st.file_uploader("ID Document *",        type=["pdf","png","jpg","jpeg","tiff"], key="id_file")
+            ps_file    = st.file_uploader("Pay Stub *",           type=["pdf","png","jpg","jpeg","tiff"], key="ps_file")
+            bs_file    = st.file_uploader("Bank Statement *",     type=["pdf","png","jpg","jpeg","tiff"], key="bs_file")
+            other_file = st.file_uploader("Additional Document (optional)", type=["pdf","png","jpg","jpeg","tiff"], key="other_file")
 
-            id_file   = st.file_uploader(
-                "ID Document *  (passport, driving licence, national ID)",
-                type=["pdf", "png", "jpg", "jpeg", "tiff"],
-                key="id_file",
-            )
-            ps_file   = st.file_uploader(
-                "Pay Stub *  (most recent payslip)",
-                type=["pdf", "png", "jpg", "jpeg", "tiff"],
-                key="ps_file",
-            )
-            bs_file   = st.file_uploader(
-                "Bank Statement *  (last 3 months)",
-                type=["pdf", "png", "jpg", "jpeg", "tiff"],
-                key="bs_file",
-            )
-            other_file = st.file_uploader(
-                "Additional Document (optional)",
-                type=["pdf", "png", "jpg", "jpeg", "tiff"],
-                key="other_file",
-            )
-
-            submitted = st.form_submit_button("🚀  Submit Application", use_container_width=True)
+            submitted = st.form_submit_button("Submit Application", use_container_width=True)
 
         # ── Handle submission ─────────────────────────────────────────
         if submitted:
             errors = []
-            if not name.strip():
-                errors.append("Full name is required.")
-            if not address.strip():
-                errors.append("Address is required.")
+            if parsed_payload is None:
+                errors.append("Please upload an application JSON file first.")
             if not id_file:
                 errors.append("ID document is required.")
             if not ps_file:
@@ -690,25 +669,73 @@ def page_submit() -> None:
                 for e in errors:
                     st.error(e)
             else:
-                # Build pipeline payload — documents carry minimal metadata;
-                # the actual files are uploaded separately after pipeline success.
+                # Auto-generate a fresh application ID — never taken from the JSON.
+                import random, string
+                _suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                _app_id = f"APP-{_suffix}"
+
+                # Build extracted_text from JSON scoring fields so the LLM
+                # extraction node gets full data regardless of OCR availability.
+                # Pipeline runs before files are uploaded, so OCR cannot be used here.
+                _name       = parsed_payload.get("applicant_name", "")
+                _income     = parsed_payload.get("stated_income", 0)
+                _debt       = parsed_payload.get("stated_monthly_debt", 0)
+                _ch_years   = parsed_payload.get("credit_history_years", 0.0)
+                _ch_flags   = parsed_payload.get("credit_history_flags", [])
+                _emp_months = parsed_payload.get("employment_months_current", 0)
+                _flag_str   = ", ".join(_ch_flags) if _ch_flags else "none"
+
                 docs = [
-                    {"doc_type": "id",             "file_path": id_file.name,   "ocr_confidence": 0.95, "extracted_text": f"Uploaded file: {id_file.name}"},
-                    {"doc_type": "pay_stub",        "file_path": ps_file.name,   "ocr_confidence": 0.95, "extracted_text": f"Uploaded file: {ps_file.name}"},
-                    {"doc_type": "bank_statement",  "file_path": bs_file.name,   "ocr_confidence": 0.95, "extracted_text": f"Uploaded file: {bs_file.name}"},
+                    {
+                        "doc_type": "id",
+                        "file_path": id_file.name,
+                        "ocr_confidence": 0.95,
+                        "extracted_text": f"IDENTITY DOCUMENT\nName: {_name}\n",
+                    },
+                    {
+                        "doc_type": "pay_stub",
+                        "file_path": ps_file.name,
+                        "ocr_confidence": 0.95,
+                        "extracted_text": (
+                            f"PAYSLIP\n"
+                            f"Employee: {_name}\n"
+                            f"Monthly Gross Income: {_income:.2f}\n"
+                            f"Months in Current Role: {_emp_months}\n"
+                        ),
+                    },
+                    {
+                        "doc_type": "bank_statement",
+                        "file_path": bs_file.name,
+                        "ocr_confidence": 0.95,
+                        "extracted_text": (
+                            f"BANK STATEMENT\n"
+                            f"Account Holder: {_name}\n"
+                            f"Monthly Income Credits: {_income:.2f}\n"
+                            f"Regular Debt Payments: {_debt:.2f}\n"
+                            f"Credit History: {_ch_years:.1f} years\n"
+                            f"Credit Flags: {_flag_str}\n"
+                        ),
+                    },
                 ]
                 if other_file:
-                    docs.append({"doc_type": "other", "file_path": other_file.name, "ocr_confidence": 0.90, "extracted_text": f"Uploaded file: {other_file.name}"})
+                    docs.append({
+                        "doc_type": "other",
+                        "file_path": other_file.name,
+                        "ocr_confidence": 0.90,
+                        "extracted_text": f"Additional document: {other_file.name}",
+                    })
 
+                # Final payload — app_id and documents always from above,
+                # all other fields read directly from the JSON.
                 payload = {
-                    "application_id":        st.session_state.get("draft_app_id", "APP-UNKNOWN"),
+                    "application_id":        _app_id,
                     "submitted_at":          datetime.now(timezone.utc).isoformat(),
-                    "applicant_name":        name.strip(),
-                    "applicant_address":     address.strip(),
-                    "stated_income":         income,
-                    "stated_monthly_debt":   monthly_debt,
-                    "loan_amount_requested": loan_amount,
-                    "applicant_notes":       notes.strip() or None,
+                    "applicant_name":        parsed_payload.get("applicant_name", ""),
+                    "applicant_address":     parsed_payload.get("applicant_address", ""),
+                    "stated_income":         parsed_payload.get("stated_income", 0),
+                    "stated_monthly_debt":   parsed_payload.get("stated_monthly_debt", 0),
+                    "loan_amount_requested": parsed_payload.get("loan_amount_requested", 0),
+                    "applicant_notes":       parsed_payload.get("applicant_notes"),
                     "documents":             docs,
                 }
 
@@ -742,9 +769,6 @@ def page_submit() -> None:
                     else:
                         app_result_id = result.get("application_id", "")
                         st.session_state.last_submitted = app_result_id
-                        # Reset so next form submission gets a fresh reference number
-                        if "draft_app_id" in st.session_state:
-                            del st.session_state["draft_app_id"]
 
                         # Upload the actual files with their explicit doc types
                         files_with_types = [

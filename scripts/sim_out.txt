@@ -1,0 +1,29 @@
+============================================================
+FORM-SIMULATION PIPELINE TEST
+(No JSON fixtures — pure name + numbers + documents)
+============================================================
+
+[PASS]  APP-FORM-A — Alice Johnson
+  Expected  : APPROVE
+  Got       : APPROVE  (composite 1.0000 = 100/100)
+  Breakdown : DTI 1.00  |  Credit 1.00  |  Income Stab 1.00
+  DTI ratio : 14.5%
+  Rationale : The agent's recommendation is APPROVE with a composite score of 1.0. This outcome is driven by the applicant's strong debt-to-income ratio of 14.55%, which is w...
+
+[PASS]  APP-FORM-B — Robert Brown
+  Expected  : REFER
+  Got       : REFER  (composite 0.6958 = 70/100)
+  Breakdown : DTI 0.53  |  Credit 0.67  |  Income Stab 1.00
+  DTI ratio : 42.2%
+  Rationale : The agent's recommendation is REFER with a composite score of 0.695833. The primary factor driving this outcome is the debt-to-income ratio, which is 42.19%, ex...
+
+[PASS]  APP-FORM-C — Gary Wilkins
+  Expected  : DECLINE
+  Got       : DECLINE  (composite 0.1700 = 17/100)
+  Breakdown : DTI 0.00  |  Credit 0.37  |  Income Stab 0.17
+  DTI ratio : 80.0%
+  Rationale : The agent's recommendation is DECLINE with a composite score of 0.17. This outcome is primarily driven by the applicant's debt-to-income ratio of 80%, which sig...
+
+============================================================
+RESULT: ALL PASSED
+============================================================

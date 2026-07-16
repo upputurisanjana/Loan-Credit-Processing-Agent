@@ -1,0 +1,8 @@
+C:\Users\sanju\OneDrive\Documents\Gen AI workshop\Loan-Credit-Processing-Agent\.venv\Lib\site-packages\langgraph\cache\base\__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.
+  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+ERROR:app.tools.github_models_client:GitHub Models call failed (model=meta/llama-3.1-70b-instruct): NotFoundError
+WARNING:app.agent.nodes.challenger_compare:app=APP-FORM-A challenger LLM call failed (Error code: 404 - {'error': {'code': 'unknown_model', 'message': 'Unknown model: meta/llama-3.1-70b-instruct', 'details': 'Unknown model: meta/llama-3.1-70b-instruct'}}) — treating as agree
+ERROR:app.tools.github_models_client:GitHub Models call failed (model=meta/llama-3.1-70b-instruct): NotFoundError
+WARNING:app.agent.nodes.challenger_compare:app=APP-FORM-B challenger LLM call failed (Error code: 404 - {'error': {'code': 'unknown_model', 'message': 'Unknown model: meta/llama-3.1-70b-instruct', 'details': 'Unknown model: meta/llama-3.1-70b-instruct'}}) — treating as agree
+ERROR:app.tools.github_models_client:GitHub Models call failed (model=meta/llama-3.1-70b-instruct): NotFoundError
+WARNING:app.agent.nodes.challenger_compare:app=APP-FORM-C challenger LLM call failed (Error code: 404 - {'error': {'code': 'unknown_model', 'message': 'Unknown model: meta/llama-3.1-70b-instruct', 'details': 'Unknown model: meta/llama-3.1-70b-instruct'}}) — treating as agree

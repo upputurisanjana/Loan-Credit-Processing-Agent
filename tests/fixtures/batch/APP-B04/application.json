@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B04",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Michael Harris",
   "applicant_address": "5 Elm Street, Birmingham, B1 2AA",
@@ -7,24 +6,9 @@
   "stated_monthly_debt": 936.0,
   "loan_amount_requested": 22000.0,
   "applicant_notes": "Business equipment purchase.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B04/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "PASSPORT\nName: Michael Harris\nDate of Birth: 1975-09-30\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B04/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Michael Harris\nEmployer: Midlands Engineering Ltd\nMonthly Gross Income: 5200.00\nEmployment Start: 2015-04-01\nMonths in Current Role: 135"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B04/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Michael Harris\nStatement Period: April-June 2026\nMonthly Income Credits: 3536.00\nRegular Debt Payments: 936.00\nCredit History: 7.0 years\nCredit Flags: late_payment_36m"
-    }
-  ]
+  "credit_history_years": 7.0,
+  "credit_history_flags": [
+    "late_payment_36m"
+  ],
+  "employment_months_current": 135
 }

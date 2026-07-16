@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B19",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Ryan McGrath",
   "applicant_address": "5 Ivy Lane, Belfast, BT1 1AB",
@@ -7,24 +6,9 @@
   "stated_monthly_debt": 950.0,
   "loan_amount_requested": 4000.0,
   "applicant_notes": "Saving for a motorbike.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B19/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "DRIVING LICENCE\nName: Ryan McGrath\nDate of Birth: 2001-12-15\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B19/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Ryan McGrath\nEmployer: Belfast Hospitality\nMonthly Gross Income: 1900.00\nEmployment Start: 2026-01-01\nMonths in Current Role: 6"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B19/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Ryan McGrath\nStatement Period: April-June 2026\nMonthly Income Credits: 1292.00\nRegular Debt Payments: 950.00\nCredit History: 1.5 years\nCredit Flags: no_history"
-    }
-  ]
+  "credit_history_years": 1.5,
+  "credit_history_flags": [
+    "no_history"
+  ],
+  "employment_months_current": 6
 }

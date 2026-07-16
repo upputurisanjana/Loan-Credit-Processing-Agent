@@ -1,5 +1,5 @@
 # Generated Fixture Summary
-Generated: 2026-07-15 13:37 UTC
+Generated: 2026-07-16 08:12 UTC
 
 APP-ID     NAME                     INCOME     DEBT    DTI  CH-YR FLAGS                         EMP-MO EXPECTED  
 -------------------------------------------------------------------------------------------------------------------

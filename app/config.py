@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_models_endpoint: str = "https://models.github.ai/inference"
     primary_model: str = "openai/gpt-4o-mini"
-    challenger_model: str = "meta/llama-3.1-70b-instruct"
+    challenger_model: str = "openai/gpt-4o-mini"
 
     # Policy
     policy_path: str = "./policy/policy_v1.yaml"

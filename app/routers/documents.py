@@ -271,13 +271,20 @@ async def upload_documents(
 )
 async def list_documents(application_id: str) -> dict:
     """Return metadata for all documents uploaded for this application."""
-    from app.routers.intake import get_store
-    store = get_store()
-    if application_id not in store:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Application {application_id!r} not found.",
-        )
+    # Documents exist on disk regardless of whether the application is in the
+    # in-memory store (e.g. after a server restart before rehydration completes,
+    # or when the upload happened before the pipeline ran).
+    # Use the uploads folder as the source of truth.
+    upload_dir = _UPLOAD_ROOT / application_id
+    if not upload_dir.exists():
+        # No folder at all — check store as fallback to give a better error
+        from app.routers.intake import get_store
+        store = get_store()
+        if application_id not in store:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Application {application_id!r} not found.",
+            )
 
     return {
         "application_id": application_id,

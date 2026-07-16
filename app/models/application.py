@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UploadedDocument(BaseModel):
@@ -22,7 +22,15 @@ class ApplicationRaw(BaseModel):
     Contains identity, stated financials, and document references.
     This is the *untrusted* input — all fields are treated as applicant
     claims until verified.
+
+    extra='ignore' — the UI form embeds credit_history_years,
+    credit_history_flags, and employment_months_current as plain text
+    inside documents[].extracted_text rather than as top-level fields.
+    Any extra keys are silently dropped so the model does not reject
+    valid payloads that carry those convenience fields.
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     application_id: str = Field(..., description="Unique application identifier")
     submitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B09",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Laura Simmons",
   "applicant_address": "77 Ash Grove, Nottingham, NG1 2BC",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 960.0,
   "loan_amount_requested": 10000.0,
   "applicant_notes": "Car purchase.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B09/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "PASSPORT\nName: Laura Simmons\nDate of Birth: 1993-08-07\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B09/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Laura Simmons\nEmployer: East Midlands College\nMonthly Gross Income: 3200.00\nEmployment Start: 2023-06-01\nMonths in Current Role: 25"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B09/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Laura Simmons\nStatement Period: April-June 2026\nMonthly Income Credits: 2176.00\nRegular Debt Payments: 960.00\nCredit History: 3.5 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 3.5,
+  "credit_history_flags": [],
+  "employment_months_current": 25
 }

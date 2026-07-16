@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B01",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Sarah Thompson",
   "applicant_address": "14 Willow Close, Bristol, BS1 4LT",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 900.0,
   "loan_amount_requested": 25000.0,
   "applicant_notes": "Home renovation project.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B01/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "PASSPORT\nName: Sarah Thompson\nDate of Birth: 1983-06-22\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B01/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Sarah Thompson\nEmployer: Bristol City Council\nMonthly Gross Income: 6000.00\nEmployment Start: 2018-03-01\nMonths in Current Role: 100"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B01/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Sarah Thompson\nStatement Period: April-June 2026\nMonthly Income Credits: 4080.00\nRegular Debt Payments: 900.00\nCredit History: 9.0 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 9.0,
+  "credit_history_flags": [],
+  "employment_months_current": 100
 }

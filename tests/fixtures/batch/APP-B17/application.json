@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B17",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Barry Griffiths",
   "applicant_address": "8 Laurel Road, Swansea, SA1 3KL",
@@ -7,24 +6,10 @@
   "stated_monthly_debt": 1760.0,
   "loan_amount_requested": 15000.0,
   "applicant_notes": "Trying to recover from redundancy.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B17/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "DRIVING LICENCE\nName: Barry Griffiths\nDate of Birth: 1974-09-02\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B17/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Barry Griffiths\nEmployer: Port Talbot Steel\nMonthly Gross Income: 3200.00\nEmployment Start: 2024-04-01\nMonths in Current Role: 15"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B17/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Barry Griffiths\nStatement Period: April-June 2026\nMonthly Income Credits: 2176.00\nRegular Debt Payments: 1760.00\nCredit History: 5.0 years\nCredit Flags: late_payment_12m, default_36m"
-    }
-  ]
+  "credit_history_years": 5.0,
+  "credit_history_flags": [
+    "late_payment_12m",
+    "default_36m"
+  ],
+  "employment_months_current": 15
 }

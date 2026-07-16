@@ -51,6 +51,24 @@ def ocr_file(app_id: str, filename: str) -> tuple[str, float | None]:
 
     suffix = file_path.suffix.lower()
 
+    # ── Plain-text fallback ─────────────────────────────────────────────────
+    # If the file contains readable UTF-8 text (e.g. a .pdf named file that
+    # is actually a text document), read it directly — no Tesseract needed.
+    try:
+        raw = file_path.read_bytes()
+        text = raw.decode("utf-8")
+        # Confirm it looks like text: at least 1 printable char, no null bytes
+        printable = sum(1 for c in text if c.isprintable() or c in "\n\r\t")
+        if b"\x00" not in raw and printable > 0:
+            log.info("ocr: %s is plain text — reading directly (%d chars)", file_path.name, len(text))
+            return text.strip(), 1.0
+    except UnicodeDecodeError:
+        pass  # binary file — fall through to image/PDF OCR
+    except Exception as exc:  # noqa: BLE001
+        # Log I/O errors (PermissionError, OSError, etc.) before falling through
+        log.warning("ocr: plain-text read failed for %s — %s: %s",
+                    file_path.name, type(exc).__name__, exc)
+
     try:
         if suffix == ".pdf":
             return _ocr_pdf(file_path)

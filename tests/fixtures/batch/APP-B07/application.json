@@ -1,5 +1,4 @@
 {
-  "application_id": "APP-B07",
   "submitted_at": "2026-07-15T09:00:00Z",
   "applicant_name": "Aisha Khan",
   "applicant_address": "9 Cedar Court, Sheffield, S1 4AB",
@@ -7,24 +6,7 @@
   "stated_monthly_debt": 840.0,
   "loan_amount_requested": 15000.0,
   "applicant_notes": "Postgraduate course funding.",
-  "documents": [
-    {
-      "doc_type": "id",
-      "file_path": "uploads/APP-B07/id.pdf",
-      "ocr_confidence": 0.97,
-      "extracted_text": "PASSPORT\nName: Aisha Khan\nDate of Birth: 1994-07-11\nNationality: British"
-    },
-    {
-      "doc_type": "pay_stub",
-      "file_path": "uploads/APP-B07/pay_stub.pdf",
-      "ocr_confidence": 0.96,
-      "extracted_text": "PAYSLIP - June 2026\nEmployee: Aisha Khan\nEmployer: Digital Media Corp\nMonthly Gross Income: 4200.00\nEmployment Start: 2022-01-01\nMonths in Current Role: 54"
-    },
-    {
-      "doc_type": "bank_statement",
-      "file_path": "uploads/APP-B07/bank_statement.pdf",
-      "ocr_confidence": 0.95,
-      "extracted_text": "Account Holder: Aisha Khan\nStatement Period: April-June 2026\nMonthly Income Credits: 2856.00\nRegular Debt Payments: 840.00\nCredit History: 5.0 years\nCredit Flags: none"
-    }
-  ]
+  "credit_history_years": 5.0,
+  "credit_history_flags": [],
+  "employment_months_current": 54
 }
