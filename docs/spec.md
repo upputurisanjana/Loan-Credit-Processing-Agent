@@ -77,14 +77,19 @@ These are not in the original catalog. They are what separates this build from t
 - **Adverse action notice generator** (moved up from stretch goal to core, since it's a real regulatory requirement in most jurisdictions — ECOA/Reg B in the US, similar elsewhere): auto-drafts the specific-reason notice for DECLINE, held for human edit/approval before sending.
 - **Case queue with SLA tracking**: applications in REFER state age visibly; underwriters see oldest-first.
 - **Underwriter override with mandatory reason capture**: if a human overrides the agent's recommendation, the override reason is a required field and is stored alongside the original recommendation — never silently overwritten.
-- **Second-look / challenger model comparison**: a second, independent model re-scores the same file; material disagreement (>1 band) is flagged for the underwriter rather than resolved automatically.
+- **Second-look / challenger model comparison**: a second, independent model re-scores the same file; material disagreement (>1 band) is flagged for the underwriter and forces the recommendation to REFER regardless of either individual result.
 - **Fairness dashboard across a batch**: beyond the single-file identity-swap test, run approval-rate parity checks across protected-class proxies (when available in synthetic data) on a rolling batch, not just per-application.
+- **Two-layer fairness check** (replaces single identity-blind re-score):
+  1. **Structural recheck** (`fairness_recheck.py`): pure Python, no LLM — re-runs the deterministic scorer with identity fields masked; band must match original.
+  2. **LLM semantic review** (`fairness_llm_review.py`): scans the score breakdown for identity-proxy language that could indicate bias in how the rationale is framed. Runs only after the structural check passes. On LLM failure, defaults to no flag (fail-open).
+- **Name consistency verification in VERIFY node**: extracts applicant name from ID, pay stub, and bank statement via regex, then fuzzy-matches against the stated `applicant_name` (Levenshtein distance ≤ 1 for OCR noise tolerance). Mismatches flagged as a consistency warning.
+- **JSON-based application submission**: the Streamlit UI accepts an `application.json` file + document uploads, rather than requiring manual form entry. The JSON is parsed and previewed live before submission.
 
 ### 2.2 Non-functional additions
 - **Full audit immutability**: decision records are append-only (no update/delete on a finalized record); corrections happen via a new linked record, never an edit.
 - **Latency budget**: end-to-end agent run (verify → score → recommend) target < 20s for a clean file with no OCR needed.
 - **Determinism for scoring**: the policy-scoring step is pure Python (no LLM), so the same inputs always produce the same score — the LLM is used for extraction, explanation, and drafting, never for the arithmetic.
-- **PII handling**: names/addresses are hashed or tokenized before being sent to any external model call used for the fairness re-score; the identity-blind pass is architecturally guaranteed, not just prompted-for.
+- **PII handling**: names/addresses are hashed or tokenized before being sent to any external model call used for the fairness re-score; the identity-blind pass is architecturally guaranteed, not just prompted-for. The structural fairness recheck strips identity fields entirely; the LLM semantic review only sees score factors, never raw PII.
 - **Accessibility**: UI meets WCAG 2.1 AA (keyboard nav, contrast, screen-reader labels) — appropriate given this is a compliance-adjacent tool.
 
 ---
@@ -92,34 +97,59 @@ These are not in the original catalog. They are what separates this build from t
 ## 3. System overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         UNDERWRITER UI                            │
-│   (React) — intake, case queue, decision detail, audit trail      │
-└───────────────────────────────┬───────────────────────────────────┘
-                                 │ REST / JSON
-┌───────────────────────────────▼───────────────────────────────────┐
-│                          FastAPI Backend                            │
-│  ┌───────────────┐  ┌───────────────┐  ┌────────────────────────┐  │
-│  │  Intake API    │  │ Decision API  │  │   Audit / Export API   │  │
-│  └───────┬───────┘  └───────┬───────┘  └───────────┬─────────────┘  │
-│          │                  │                       │                │
-│  ┌───────▼──────────────────▼───────────────────────▼─────────────┐ │
-│  │                 LangGraph Decisioning Agent                     │ │
-│  │   verify → extract → score(policy) → fairness-recheck →         │ │
-│  │   recommend → draft-notice → await human gate                   │ │
-│  └───────┬──────────────┬──────────────┬──────────────┬──────────┘ │
-│          │              │              │              │             │
-│   ┌──────▼─────┐ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────────┐ │
-│   │ Doc Verify │ │ Policy RAG  │ │ Policy      │ │ GitHub Models   │ │
-│   │ Tool       │ │ (citations) │ │ Score Engine│ │ API (PAT auth)  │ │
-│   │(pydantic)  │ │ (vector DB) │ │(pure python)│ │ LLM calls       │ │
-│   └────────────┘ └─────────────┘ └─────────────┘ └─────────────────┘ │
+┌──────────────────────────────────────────────────────────────────────┐
+│                        UNDERWRITER UI                                 │
+│  (Streamlit primary — app.py)  |  (React optional — frontend/)       │
+│  intake, case queue, decision detail, audit trail                    │
+└─────────────────────────────────┬────────────────────────────────────┘
+                                   │ REST / JSON
+┌─────────────────────────────────▼────────────────────────────────────┐
+│                          FastAPI Backend                               │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ Intake   │ │Decision  │ │ Queue    │ │Documents │ │ Audit /  │   │
+│  │ API      │ │ API      │ │ API      │ │ API      │ │ Amend API│   │
+│  └────┬─────┘ └────┬─────┘ └──────────┘ └────┬─────┘ └──────────┘   │
+│       │            │                          │                       │
+│  ┌────▼────────────▼──────────────────────────▼────────────────────┐  │
+│  │              LangGraph Decisioning Agent                        │  │
+│  │  INTAKE → VERIFY                                                │  │
+│  │    ├─ hold_for_document (missing docs → END)                    │  │
+│  │    └─ EXTRACT → SCORE → CHALLENGER →                            │  │
+│  │         FAIRNESS_RECHECK (Python, structural) →                  │  │
+│  │         FAIRNESS_LLM_REVIEW (LLM, semantic bias) →              │  │
+│  │           ├─ flag_fairness_fail → DRAFT_NOTICE → HUMAN_GATE      │  │
+│  │           └─ RECOMMEND → DRAFT_NOTICE → HUMAN_GATE               │  │
+│  └──────┬──────────────┬──────────────┬──────────────┬─────────────┘  │
+│         │              │              │              │                 │
+│  ┌──────▼─────┐ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────────┐   │
+│  │ Doc Verify │ │ Policy RAG  │ │ Policy     │ │ GitHub Models   │   │
+│  │ + Name     │ │ (citations) │ │ Score      │ │ API (PAT auth)  │   │
+│  │ Consistency│ │ (vector DB) │ │ Engine     │ │ LLM calls       │   │
+│  │(pydantic)  │ │             │ │(pure python│ │ (primary +      │   │
+│  │            │ │             │ │  no LLM)   │ │  challenger)    │   │
+│  └────────────┘ └─────────────┘ └────────────┘ └─────────────────┘   │
 │                                                                       │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │        Audit Log Store (append-only, SQLite/Postgres)         │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────────────┘
+│  ┌───────────────────────────────────────────────────────────────┐    │
+│  │        Audit Log Store (append-only, SQLite/Postgres)         │    │
+│  └───────────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────────┘
 ```
+
+### Pipeline node detail
+
+| Node | Type | What it does |
+|------|------|-------------|
+| `VERIFY` | Python | Checks required docs present, cross-document income consistency, name consistency across ID/pay stub/bank statement, OCR confidence flags |
+| `HOLD` | Terminal | Missing docs → status `hold_for_document`, pipeline ends |
+| `EXTRACT` | LLM | Reads document text, extracts income, debt, credit history, employment into `ApplicationFields` |
+| `SCORE` | Python (no LLM) | Deterministic scoring against YAML policy — DTI, credit history, income stability sub-scores + composite band |
+| `CHALLENGER` | LLM | Independent model re-scores the same fields; material disagreement (>1 band) flagged |
+| `FAIRNESS_RECHECK` | Python (no LLM) | Re-runs SCORE with identity fields masked; band must match original |
+| `FAIRNESS_LLM_REVIEW` | LLM | Scans score breakdown for identity-proxy language in rationale; fail → forced REFER |
+| `FLAG_FAIRNESS_FAIL` | Terminal | Forces `agent_recommendation = "refer"`, records disparity rationale |
+| `RECOMMEND` | LLM | Generates approve/refer/decline recommendation + plain-English rationale |
+| `DRAFT_NOTICE` | LLM | For DECLINE only — generates ECOA-style adverse-action notice draft |
+| `HUMAN_GATE` | Terminal | All paths converge here; status `pending_human_review`; awaits underwriter POST |
 
 See `ARCHITECTURE.md` for the full component breakdown, state machine, and data contracts.
 
@@ -149,6 +179,9 @@ Keep the original 5 (Section 1) verbatim in your eval suite. Add these on top:
 | 8 | Underwriter override | Underwriter overrides an APPROVE to DECLINE | Override reason required and stored; original recommendation preserved unedited | Both records exist; reason non-empty; original immutable |
 | 9 | Adverse action draft | DECLINE recommendation | Notice drafted with specific reasons tied to policy factors; held for human approval before send | Draft references real score factors; not sent without approval |
 | 10 | Policy version change mid-batch | Policy YAML updated between two applications | Each decision record stores the exact policy version used | Two applications in same session can show different policy versions correctly |
+| 11 | Name mismatch detection | Application states "Jane Smith" but ID document shows "Jane Doe" | VERIFY node flags name mismatch as a consistency warning; pipeline continues but flags are recorded | Name mismatch appears in consistency_flags; application still scored but flagged for human review |
+| 12 | Fairness semantic bias | Score breakdown rationale contains identity-proxy language (e.g. references to neighbourhood, age) | FAIRNESS_LLM_REVIEW detects bias language; recommendation forced to REFER | LLM review flag set; rationale explains the language concern; application routed to human gate |
+| 13 | Challenger forces REFER | Primary model scores APPROVE but challenger scores DECLINE (>1 band apart) | Recommendation overridden to REFER regardless of primary score; rationale cites challenger disagreement | challenger_result.bands_agree = False; agent_recommendation = "refer"; human gate reached |
 
 ---
 
@@ -169,3 +202,9 @@ Keep the original 5 (Section 1) verbatim in your eval suite. Add these on top:
 - **Human gate** — a required manual approval step before any decision takes effect.
 - **Identity-blind re-score** — re-running the scoring pipeline with name/address fields removed or masked, to verify the recommendation doesn't change.
 - **Adverse action notice** — required regulatory notice explaining specific reasons for a credit decline.
+- **Challenger band** — the policy band (APPROVE/REFER/DECLINE) produced by the second independent model; compared against the primary band to detect scoring disagreement.
+- **Bands agree** — boolean; `True` when primary and challenger produce the same band, `False` when they differ by >1 band, forcing REFER.
+- **Identity-proxy language** — wording in a score rationale that could indirectly reference protected characteristics (e.g. "neighbourhood", "area", "age group"); flagged by the LLM semantic fairness review.
+- **LLM review flag** — boolean on the `FairnessCheck` model; `True` when the semantic review detected potential bias language in the score breakdown.
+- **Fail-open** — on LLM failure during fairness review, the system defaults to no flag rather than blocking all applications; the outage is logged as a warning.
+- **Name consistency check** — VERIFY node step that extracts names from ID, pay stub, and bank statement via regex and fuzzy-matches against the stated applicant name (Levenshtein distance ≤ 1 for OCR noise tolerance).
